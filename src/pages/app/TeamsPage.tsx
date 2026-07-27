@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions } from '@/hooks/usePermissions'
 import { teamSchema } from '@/lib/validations'
-import type { Team, Operation, SalesLocation, OrganizationMember, Profile } from '@/types/database'
+import type { OrgRole, Team, TeamMember } from '@/types/database'
 import PageHeader from '@/components/shared/PageHeader'
 import StatusBadge from '@/components/shared/StatusBadge'
 import EmptyState from '@/components/shared/EmptyState'
@@ -19,7 +19,27 @@ import { ROLE_LABELS } from '@/constants/roles'
 
 type FormData = z.infer<typeof teamSchema>
 
-interface MemberWithProfile extends OrganizationMember { profile?: Profile }
+type SupervisorOption = {
+  id: string
+  user_id: string
+  profiles: { full_name: string | null } | null
+}
+
+type TeamRow = Team & {
+  sales_location: { name: string } | null
+  supervisor: {
+    user_id: string
+    profiles: { full_name: string | null } | null
+  } | null
+}
+
+type TeamMemberRow = TeamMember & {
+  organization_member: {
+    user_id: string
+    role: OrgRole
+    profiles: { full_name: string | null; email: string | null } | null
+  } | null
+}
 
 function TeamForm({ team, orgId, onClose }: { team?: Team; orgId: string; onClose: () => void }) {
   const { profile } = useAuth()
@@ -42,7 +62,7 @@ function TeamForm({ team, orgId, onClose }: { team?: Team; orgId: string; onClos
   const { data: supervisors } = useQuery({
     queryKey: ['supervisors', orgId], queryFn: async () => {
       const { data } = await supabase.from('organization_members').select('id, user_id, profiles!organization_members_user_id_fkey(full_name)').eq('organization_id', orgId).eq('role', 'supervisor').eq('status', 'active')
-      return data ?? []
+      return (data ?? []) as SupervisorOption[]
     }
   })
 
@@ -112,7 +132,7 @@ function TeamForm({ team, orgId, onClose }: { team?: Team; orgId: string; onClos
         <label className="form-label">Supervisor</label>
         <select {...register('supervisor_member_id')} className="form-input">
           <option value="">Sem supervisor</option>
-          {supervisors?.map((s: any) => (
+          {supervisors?.map((s) => (
             <option key={s.id} value={s.id}>{s.profiles?.full_name ?? s.user_id}</option>
           ))}
         </select>
@@ -153,7 +173,7 @@ export default function TeamsPage() {
       if (!isAdmin && orgId) q = q.eq('organization_id', orgId)
       const { data, error } = await q
       if (error) throw error
-      return data
+      return (data ?? []) as TeamRow[]
     },
   })
 
@@ -167,7 +187,7 @@ export default function TeamsPage() {
         .eq('team_id', membersTeam!.id)
         .eq('status', 'active')
       if (error) throw error
-      return data
+      return (data ?? []) as TeamMemberRow[]
     },
   })
 
@@ -212,7 +232,7 @@ export default function TeamsPage() {
                 </tr>
               </thead>
               <tbody>
-                {teams?.map((team: any) => (
+                {teams?.map((team) => (
                   <tr key={team.id} className="table-tr">
                     <td className="table-td">
                       <div className="font-medium text-gray-900">{team.name}</div>
@@ -263,7 +283,7 @@ export default function TeamsPage() {
             </div>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {teamMembers?.map((tm: any) => (
+              {teamMembers?.map((tm) => (
                 <li key={tm.id} className="flex items-center justify-between py-3">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{tm.organization_member?.profiles?.full_name ?? '—'}</p>

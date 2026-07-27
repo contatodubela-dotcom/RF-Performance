@@ -20,8 +20,15 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import SearchInput from '@/components/shared/SearchInput'
 import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import type { OrganizationMember, Profile } from '@/types/database'
 
 type InviteData = z.infer<typeof inviteUserSchema>
+
+type MemberProfile = Pick<Profile, 'full_name' | 'email' | 'preferred_name' | 'last_access_at'>
+
+type OrganizationMemberRow = OrganizationMember & {
+  profile: MemberProfile | null
+}
 
 function InviteForm({ orgId, onClose }: { orgId: string; onClose: () => void }) {
   const qc = useQueryClient()
@@ -110,7 +117,7 @@ export default function UsersPage() {
       else if (orgId) q = q.eq('organization_id', orgId)
       const { data, error } = await q
       if (error) throw error
-      return data
+      return (data ?? []) as OrganizationMemberRow[]
     },
   })
 
@@ -128,9 +135,9 @@ export default function UsersPage() {
   })
 
   const filtered = members?.filter(m => {
-    const profile = m.profile as any
-    const name = profile?.full_name?.toLowerCase() ?? ''
-    const email = profile?.email?.toLowerCase() ?? ''
+    const memberProfile = m.profile
+    const name = memberProfile?.full_name?.toLowerCase() ?? ''
+    const email = memberProfile?.email?.toLowerCase() ?? ''
     const matchSearch = !search || name.includes(search.toLowerCase()) || email.includes(search.toLowerCase())
     const matchRole = !roleFilter || m.role === roleFilter
     return matchSearch && matchRole
@@ -183,7 +190,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((m: any) => {
+                {filtered.map((m) => {
                   const p = m.profile
                   const displayName = p?.full_name ?? m.user_id
                   return (
