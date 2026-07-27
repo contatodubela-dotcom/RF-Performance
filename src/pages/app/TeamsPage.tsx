@@ -19,10 +19,15 @@ import { ROLE_LABELS } from '@/constants/roles'
 
 type FormData = z.infer<typeof teamSchema>
 
+type SupervisorProfileRelation = { full_name: string | null }
+
 type SupervisorOption = {
   id: string
   user_id: string
-  profiles: { full_name: string | null } | null
+  profiles:
+    | SupervisorProfileRelation
+    | SupervisorProfileRelation[]
+    | null
 }
 
 type TeamRow = Team & {
@@ -132,9 +137,17 @@ function TeamForm({ team, orgId, onClose }: { team?: Team; orgId: string; onClos
         <label className="form-label">Supervisor</label>
         <select {...register('supervisor_member_id')} className="form-input">
           <option value="">Sem supervisor</option>
-          {supervisors?.map((s) => (
-            <option key={s.id} value={s.id}>{s.profiles?.full_name ?? s.user_id}</option>
-          ))}
+          {supervisors?.map((supervisor) => {
+            const relatedProfile = Array.isArray(supervisor.profiles)
+              ? supervisor.profiles[0]
+              : supervisor.profiles
+
+            return (
+              <option key={supervisor.id} value={supervisor.id}>
+                {relatedProfile?.full_name ?? supervisor.user_id}
+              </option>
+            )
+          })}
         </select>
       </div>
       <div>
