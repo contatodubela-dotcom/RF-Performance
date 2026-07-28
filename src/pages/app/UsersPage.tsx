@@ -24,13 +24,30 @@ import type { OrganizationMember, Profile } from '@/types/database'
 
 type InviteData = z.infer<typeof inviteUserSchema>
 
+type InviteResult = {
+  success: boolean
+  user_id: string
+  membership_id: string
+  invite_sent: boolean
+  already_member: boolean
+  message?: string
+}
+
 type MemberProfile = Pick<Profile, 'full_name' | 'email' | 'preferred_name' | 'last_access_at'>
 
 type OrganizationMemberRow = OrganizationMember & {
   profile: MemberProfile | null
 }
 
-function InviteForm({ orgId, onClose }: { orgId: string; onClose: () => void }) {
+function InviteForm({
+  orgId,
+  allowDirectorRole,
+  onClose,
+}: {
+  orgId: string
+  allowDirectorRole: boolean
+  onClose: () => void
+}) {
   const qc = useQueryClient()
   const { register, handleSubmit, formState: { errors } } = useForm<InviteData>({
     resolver: zodResolver(inviteUserSchema),
@@ -42,16 +59,38 @@ function InviteForm({ orgId, onClose }: { orgId: string; onClose: () => void }) 
         body: { email: data.email, full_name: data.full_name, role: data.role, organization_id: orgId },
       })
       if (error) {
-        let msg = error.message
+        let message = error.message
+
         if (error instanceof FunctionsHttpError) {
-          try { const t = await error.context?.text(); msg = t || msg } catch { /* */ }
+          try {
+            const payload = await error.context?.json() as {
+              error?: string
+              message?: string
+            } | undefined
+
+            message =
+              payload?.error ??
+              payload?.message ??
+              message
+          } catch {
+            // Mantém a mensagem original quando a resposta não é JSON.
+          }
         }
-        throw new Error(msg)
+
+        throw new Error(message)
       }
-      return result
+
+      return result as InviteResult
     },
-    onSuccess: () => {
-      toast.success('Convite enviado com sucesso. O usuário receberá um e-mail de acesso.')
+    onSuccess: (result) => {
+      toast.success(
+        result.message ??
+          (
+            result.invite_sent
+              ? 'Convite enviado com sucesso.'
+              : 'Vínculo criado com sucesso.'
+          ),
+      )
       qc.invalidateQueries({ queryKey: ['org-members'] })
       onClose()
     },
@@ -74,7 +113,11 @@ function InviteForm({ orgId, onClose }: { orgId: string; onClose: () => void }) 
         <label className="form-label">Perfil de acesso *</label>
         <select {...register('role')} className="form-input">
           <option value="">Selecione...</option>
-          <option value={ORG_ROLES.DIRECTOR}>{ROLE_LABELS.director}</option>
+          {allowDirectorRole && (
+            <option value={ORG_ROLES.DIRECTOR}>
+              {ROLE_LABELS.director}
+            </option>
+          )}
           <option value={ORG_ROLES.SUPERVISOR}>{ROLE_LABELS.supervisor}</option>
           <option value={ORG_ROLES.SALESPERSON}>{ROLE_LABELS.salesperson}</option>
         </select>
@@ -236,7 +279,11 @@ export default function UsersPage() {
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Convidar usuário</DialogTitle></DialogHeader>
-          <InviteForm orgId={orgId} onClose={() => setInviteOpen(false)} />
+          <InviteForm
+            orgId={orgId}
+            allowDirectorRole={isAdmin}
+            onClose={() => setInviteOpen(false)}
+          />
         </DialogContent>
       </Dialog>
 

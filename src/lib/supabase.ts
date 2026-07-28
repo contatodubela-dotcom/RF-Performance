@@ -11,8 +11,9 @@ if (!supabaseUrl || !supabasePublishableKey) {
   )
 }
 
-// Somente a chave publicável é utilizada no frontend.
-// Nunca exponha service_role, secret key ou senha do banco.
+// Aplicação web cliente: o fluxo implícito permite aceitar convites
+// administrativos em um navegador diferente daquele que iniciou o envio.
+// Nunca exponha secret key, service_role ou senha do banco no frontend.
 export const supabase = createClient(
   supabaseUrl,
   supabasePublishableKey,
@@ -21,7 +22,7 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
-      flowType: 'pkce',
+      flowType: 'implicit',
     },
   },
 )
