@@ -30,19 +30,19 @@ const NAV: NavSection[] = [
     title: 'GESTÃO',
     items: [
       { label: 'Início', path: ROUTES.HOME, icon: Home },
-      { label: 'Plano de 90 Dias', path: ROUTES.PLAN_90_DAYS, icon: Calendar, pending: true },
-      { label: 'Metas', path: ROUTES.GOALS, icon: Target, pending: true },
+      { label: 'Plano de 90 Dias', path: ROUTES.PLAN_90_DAYS, icon: Calendar },
+      { label: 'Metas', path: ROUTES.GOALS, icon: Target },
       { label: 'Resultados', path: ROUTES.RESULTS, icon: TrendingUp, pending: true },
-      { label: 'Ações', path: ROUTES.ACTIONS, icon: Zap, pending: true },
-      { label: 'Reuniões', path: ROUTES.MEETINGS, icon: Users2, pending: true },
+      { label: 'Ações', path: ROUTES.ACTIONS, icon: Zap },
+      { label: 'Reuniões', path: ROUTES.MEETINGS, icon: Users2 },
     ],
   },
   {
     title: 'DESENVOLVIMENTO',
     items: [
-      { label: 'Treinamentos', path: ROUTES.TRAINING, icon: BookOpen, pending: true },
+      { label: 'Treinamentos', path: ROUTES.TRAINING, icon: BookOpen },
       { label: 'Avaliações', path: ROUTES.EVALUATIONS, icon: ClipboardCheck, pending: true },
-      { label: 'Feedbacks', path: ROUTES.FEEDBACKS, icon: MessageSquare, pending: true },
+      { label: 'Feedbacks', path: ROUTES.FEEDBACKS, icon: MessageSquare },
     ],
   },
   {
