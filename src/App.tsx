@@ -20,6 +20,12 @@ import TeamsPage from '@/pages/app/TeamsPage'
 import UsersPage from '@/pages/app/UsersPage'
 import SettingsPage from '@/pages/app/SettingsPage'
 import PlaceholderPage from '@/pages/app/PlaceholderPage'
+import Plan90DaysPage from '@/pages/app/Plan90DaysPage'
+import GoalsPage from '@/pages/app/GoalsPage'
+import ActionsPage from '@/pages/app/ActionsPage'
+import MeetingsPage from '@/pages/app/MeetingsPage'
+import TrainingPage from '@/pages/app/TrainingPage'
+import FeedbacksPage from '@/pages/app/FeedbacksPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 function AppFallback() {
@@ -48,32 +54,20 @@ export default function App() {
 
               {/* Gestão */}
               <Route path={ROUTES.HOME} element={<HomePage />} />
-              <Route path={ROUTES.PLAN_90_DAYS} element={
-                <PlaceholderPage title="Plano de 90 Dias" description="Planejamento estratégico da operação comercial em ciclos de 90 dias, com metas, indicadores e ações programadas." icon="Calendar" />
-              } />
-              <Route path={ROUTES.GOALS} element={
-                <PlaceholderPage title="Metas" description="Definição e acompanhamento de metas individuais, por equipe e por PDV — cotas, conversão e receita." icon="Target" />
-              } />
+              <Route path={ROUTES.PLAN_90_DAYS} element={<Plan90DaysPage />} />
+              <Route path={ROUTES.GOALS} element={<GoalsPage />} />
               <Route path={ROUTES.RESULTS} element={
                 <PlaceholderPage title="Resultados" description="Acompanhamento de cotas vendidas, conversão e desempenho comercial em tempo real." icon="TrendingUp" />
               } />
-              <Route path={ROUTES.ACTIONS} element={
-                <PlaceholderPage title="Ações" description="Planos de ação corretivos e preventivos para melhoria de desempenho individual e de equipe." icon="Zap" />
-              } />
-              <Route path={ROUTES.MEETINGS} element={
-                <PlaceholderPage title="Reuniões" description="Registro e acompanhamento de reuniões de equipe, feedbacks coletivos e decisões estratégicas." icon="Users2" />
-              } />
+              <Route path={ROUTES.ACTIONS} element={<ActionsPage />} />
+              <Route path={ROUTES.MEETINGS} element={<MeetingsPage />} />
 
               {/* Desenvolvimento */}
-              <Route path={ROUTES.TRAINING} element={
-                <PlaceholderPage title="Treinamentos" description="Trilhas de desenvolvimento, capacitações, módulos e controle de participação por colaborador." icon="BookOpen" />
-              } />
+              <Route path={ROUTES.TRAINING} element={<TrainingPage />} />
               <Route path={ROUTES.EVALUATIONS} element={
                 <PlaceholderPage title="Avaliações" description="Avaliações de desempenho individual, comportamental e técnica por período." icon="ClipboardCheck" />
               } />
-              <Route path={ROUTES.FEEDBACKS} element={
-                <PlaceholderPage title="Feedbacks" description="Registro estruturado de feedbacks entre líderes e colaboradores — pontual e de período." icon="MessageSquare" />
-              } />
+              <Route path={ROUTES.FEEDBACKS} element={<FeedbacksPage />} />
 
               {/* Análise */}
               <Route path={ROUTES.REPORTS} element={
