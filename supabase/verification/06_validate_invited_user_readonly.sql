@@ -2,14 +2,17 @@
 -- RF Performance Comercial
 -- Validação somente leitura — usuário convidado
 --
--- Antes de executar, substitua:
+-- Antes de executar, ajuste expected_role na CTE validation_params.
 --   TEST_USER_EMAIL
---   EXPECTED_ROLE
--- Valores aceitos para EXPECTED_ROLE:
+-- Valor atual para este teste: salesperson
+-- Valores aceitos:
 --   director | supervisor | salesperson
 -- ============================================================================
 
-with target_auth_user as (
+with validation_params as (
+  select 'salesperson'::text as expected_role
+),
+target_auth_user as (
   select
     u.id,
     lower(u.email) as email,
@@ -67,7 +70,7 @@ select
     when (
       select role
       from target_membership
-    ) <> 'EXPECTED_ROLE'
+    ) <> (select expected_role from validation_params)
       then 'FAIL_ROLE'
     when (
       select status
