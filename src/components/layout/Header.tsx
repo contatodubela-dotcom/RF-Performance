@@ -39,7 +39,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
     isLast: i === segments.length - 1,
   }))
 
-  const displayName = profile?.preferred_name || profile?.full_name?.split(' ')[0] || '—'
+  const displayName = profile?.preferred_name || profile?.full_name || '—'
   const roleLabel = currentRole ? (ROLE_LABELS[currentRole] ?? '') : ''
 
   return (

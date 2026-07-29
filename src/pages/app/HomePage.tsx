@@ -106,7 +106,7 @@ export default function HomePage() {
         <h1 className="text-xl font-bold text-gray-900">
           Bom dia,{' '}
           {profile?.preferred_name ||
-            profile?.full_name?.split(' ')[0] ||
+            profile?.full_name ||
             'bem-vindo'}
           !
         </h1>
