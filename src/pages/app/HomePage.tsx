@@ -84,10 +84,18 @@ export default function HomePage() {
   const { data: checklist, isLoading: checklistLoading } =
     useSetupChecklist(orgId)
 
-  const completedItems = checklist
-    ? Object.values(checklist).filter(Boolean).length
-    : 0
-  const totalItems = 7
+  const checklistProgress = [
+    checklist?.orgRegistered ?? false,
+    checklist?.operationRegistered ?? false,
+    checklist?.pdvsReviewed ?? false,
+    checklist?.teamsCreated ?? false,
+    checklist?.operationalPeopleConfirmed ?? false,
+    checklist?.supervisorAccountsLinked ?? false,
+    checklist?.salespersonAccountsLinked ?? false,
+    checklist?.linksCompleted ?? false,
+  ]
+  const completedItems = checklistProgress.filter(Boolean).length
+  const totalItems = checklistProgress.length
 
   if (statsLoading || checklistLoading) {
     return (
@@ -124,41 +132,72 @@ export default function HomePage() {
         </p>
       </div>
 
-      {stats?.baselineMonthlySales && stats?.targetMonthlySales ? (
+      {(stats?.adjustedMonthlyCapacityReference ?? 0) > 0 &&
+      (stats?.fullMonthlyCapacityReference ?? 0) > 0 ? (
         <div className="mb-6 rounded-xl border border-brand-200 bg-brand-50 p-5">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-700">
                 <TrendingUp className="h-5 w-5 text-white" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-brand-900">
-                  Objetivo de aceleração comercial
+                  Referência operacional de curto prazo
                 </p>
-                <p className="mt-1 text-sm text-brand-800">
-                  Evoluir de {stats.baselineMonthlySales} para{' '}
-                  {stats.targetMonthlySales} cotas mensais sem ampliar os 3
-                  PDVs, os 3 supervisores ou os 20 vendedores planejados.
+                <p className="mt-1 max-w-3xl text-sm text-brand-800">
+                  Com {stats?.confirmedProducerCount ?? 0} produtores
+                  ativos e mínimo de{' '}
+                  {stats?.minimumMonthlySalesPerProducer ?? 0} cotas por
+                  produtor, a referência atual é de{' '}
+                  <strong>
+                    {stats?.adjustedMonthlyCapacityReference ?? 0} cotas
+                    mensais
+                  </strong>
+                  . Com a equipe completa de{' '}
+                  {stats?.plannedProducerCount ?? 0} produtores, a
+                  capacidade plena inicial é de{' '}
+                  <strong>
+                    {stats?.fullMonthlyCapacityReference ?? 0} cotas
+                    mensais
+                  </strong>
+                  .
+                </p>
+                <p className="mt-2 text-xs text-brand-700">
+                  Esses números representam capacidade operacional, não
+                  baseline histórico validado.
                 </p>
               </div>
             </div>
-            <div className="rounded-lg bg-white px-4 py-3 text-center shadow-sm">
-              <p className="text-2xl font-bold text-brand-800">
-                +{stats.growthTargetPercent}%
-              </p>
-              <p className="text-xs text-gray-500">meta de crescimento</p>
+
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-lg bg-white px-4 py-3 shadow-sm">
+                <p className="text-2xl font-bold text-brand-800">
+                  {stats?.adjustedMonthlyCapacityReference ?? 0}
+                </p>
+                <p className="text-xs text-gray-500">
+                  referência atual
+                </p>
+              </div>
+              <div className="rounded-lg bg-white px-4 py-3 shadow-sm">
+                <p className="text-2xl font-bold text-green-700">
+                  {stats?.fullMonthlyCapacityReference ?? 0}
+                </p>
+                <p className="text-xs text-gray-500">
+                  capacidade plena
+                </p>
+              </div>
             </div>
           </div>
         </div>
       ) : null}
 
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
         <StatCard
           label="PDVs ativos"
           value={stats?.pdvCount ?? 0}
           detail={
             (stats?.pendingPdvCount ?? 0) > 0
-              ? `${stats?.pendingPdvCount} aguardando dados reais`
+              ? `${stats?.pendingPdvCount} aguardando confirmação`
               : 'Dados confirmados'
           }
           icon={MapPin}
@@ -169,30 +208,37 @@ export default function HomePage() {
           value={stats?.teamCount ?? 0}
           detail={
             (stats?.templateTeamCount ?? 0) > 0
-              ? `${stats?.templateTeamCount} modelos editáveis`
-              : undefined
+              ? `${stats?.templateTeamCount} registros de modelo`
+              : 'Estrutura confirmada'
           }
           icon={Users2}
           color="bg-blue-600"
         />
         <StatCard
-          label="Supervisores"
-          value={stats?.supervisorCount ?? 0}
-          detail={`${stats?.plannedSupervisorCount ?? 0} posições planejadas`}
-          icon={UserCog}
-          color="bg-orange-500"
-        />
-        <StatCard
-          label="Vendedores"
-          value={stats?.salespersonCount ?? 0}
-          detail={`${stats?.plannedSalespersonCount ?? 0} posições planejadas`}
+          label="Produtores ativos"
+          value={stats?.confirmedProducerCount ?? 0}
+          detail={`${stats?.confirmedSupervisorCount ?? 0} supervisores + ${stats?.confirmedSalespersonCount ?? 0} vendedores`}
           icon={Users}
           color="bg-purple-600"
         />
         <StatCard
-          label="Total de membros"
-          value={stats?.totalMembers ?? 0}
-          detail="Usuários reais vinculados"
+          label="Vagas"
+          value={stats?.vacantSalespersonCount ?? 0}
+          detail="Posições de vendedor em aberto"
+          icon={UserCog}
+          color="bg-orange-500"
+        />
+        <StatCard
+          label="Capacidade plena"
+          value={stats?.plannedProducerCount ?? 0}
+          detail="5 produtores por equipe"
+          icon={Building2}
+          color="bg-green-600"
+        />
+        <StatCard
+          label="Usuários vinculados"
+          value={stats?.linkedProducerCount ?? 0}
+          detail={`${stats?.supervisorCount ?? 0} supervisores + ${stats?.salespersonCount ?? 0} vendedores`}
           icon={Link2}
           color="bg-gray-600"
         />
@@ -232,19 +278,23 @@ export default function HomePage() {
             />
             <CheckItem
               done={checklist?.pdvsReviewed ?? false}
-              label="3 PDVs confirmados (nome, shopping, cidade)"
-            />
-            <CheckItem
-              done={checklist?.supervisorsRegistered ?? false}
-              label="3 supervisores cadastrados"
+              label={`${stats?.pdvCount ?? 0} PDVs confirmados`}
             />
             <CheckItem
               done={checklist?.teamsCreated ?? false}
-              label="3 equipes modelo criadas"
+              label={`${stats?.teamCount ?? 0} equipes confirmadas`}
             />
             <CheckItem
-              done={checklist?.salespersonsRegistered ?? false}
-              label="Vendedores cadastrados"
+              done={checklist?.operationalPeopleConfirmed ?? false}
+              label={`${stats?.confirmedSupervisorCount ?? 0} supervisores-vendedores e ${stats?.confirmedSalespersonCount ?? 0} vendedores confirmados`}
+            />
+            <CheckItem
+              done={checklist?.supervisorAccountsLinked ?? false}
+              label={`Contas dos supervisores vinculadas (${stats?.supervisorCount ?? 0}/${stats?.confirmedSupervisorCount ?? 0})`}
+            />
+            <CheckItem
+              done={checklist?.salespersonAccountsLinked ?? false}
+              label={`Contas dos vendedores vinculadas (${stats?.salespersonCount ?? 0}/${stats?.confirmedSalespersonCount ?? 0})`}
             />
             <CheckItem
               done={checklist?.linksCompleted ?? false}
@@ -252,10 +302,17 @@ export default function HomePage() {
             />
           </ul>
 
-          {completedItems === totalItems && (
+          {completedItems === totalItems ? (
             <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-center">
               <p className="text-sm font-semibold text-green-800">
                 Estrutura pronta para a execução do plano.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-semibold text-amber-900">
+                Estrutura operacional confirmada; vinculação de contas
+                ainda em andamento.
               </p>
             </div>
           )}
@@ -296,10 +353,40 @@ export default function HomePage() {
             </div>
             <div className="flex items-start justify-between gap-4 border-t border-gray-100 pt-3">
               <dt className="shrink-0 text-sm text-gray-500">
-                Estrutura modelo
+                Estrutura operacional
               </dt>
               <dd className="text-right text-sm text-gray-900">
-                3 PDVs · 3 equipes · 20 vendedores
+                {stats?.pdvCount ?? 0} PDVs · {stats?.teamCount ?? 0}{' '}
+                equipes · {stats?.confirmedProducerCount ?? 0}{' '}
+                produtores ativos
+              </dd>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-t border-gray-100 pt-3">
+              <dt className="shrink-0 text-sm text-gray-500">
+                Composição confirmada
+              </dt>
+              <dd className="text-right text-sm text-gray-900">
+                {stats?.confirmedSupervisorCount ?? 0}{' '}
+                supervisores-vendedores ·{' '}
+                {stats?.confirmedSalespersonCount ?? 0} vendedores
+              </dd>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-t border-gray-100 pt-3">
+              <dt className="shrink-0 text-sm text-gray-500">
+                Capacidade e vagas
+              </dt>
+              <dd className="text-right text-sm text-gray-900">
+                {stats?.plannedProducerCount ?? 0} produtores ·{' '}
+                {stats?.vacantSalespersonCount ?? 0} vagas
+              </dd>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-t border-gray-100 pt-3">
+              <dt className="shrink-0 text-sm text-gray-500">
+                Contas vinculadas
+              </dt>
+              <dd className="text-right text-sm text-gray-900">
+                {stats?.supervisorCount ?? 0} supervisores ·{' '}
+                {stats?.salespersonCount ?? 0} vendedores
               </dd>
             </div>
             <div className="flex items-start justify-between gap-4 border-t border-gray-100 pt-3">
