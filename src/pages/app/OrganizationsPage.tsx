@@ -20,9 +20,17 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { z } from 'zod'
 
+type OrganizationManagement = Omit<Organization, 'metadata'>
+
 type FormData = z.infer<typeof organizationSchema>
 
-function OrgForm({ org, onClose }: { org?: Organization; onClose: () => void }) {
+function OrgForm({
+  org,
+  onClose,
+}: {
+  org?: OrganizationManagement
+  onClose: () => void
+}) {
   const { profile } = useAuth()
   const qc = useQueryClient()
   const isEdit = !!org
@@ -119,24 +127,34 @@ export default function OrganizationsPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
-  const [editOrg, setEditOrg] = useState<Organization | undefined>()
-  const [confirmAction, setConfirmAction] = useState<{ org: Organization; action: string } | null>(null)
+  const [editOrg, setEditOrg] =
+    useState<OrganizationManagement | undefined>()
+  const [confirmAction, setConfirmAction] = useState<{
+    org: OrganizationManagement
+    action: string
+  } | null>(null)
 
   const { data: orgs, isLoading } = useQuery({
     queryKey: ['organizations'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('*')
-        .order('trade_name')
+      const { data, error } = await supabase.rpc(
+        'list_organizations_for_platform_admin' as never,
+      )
       if (error) throw error
-      return data as Organization[]
+      return (data ?? []) as unknown as
+        OrganizationManagement[]
     },
   })
 
   const statusMutation = useMutation({
-    mutationFn: async ({ org, action }: { org: Organization; action: string }) => {
-      let update: Partial<Organization> = {}
+    mutationFn: async ({
+      org,
+      action,
+    }: {
+      org: OrganizationManagement
+      action: string
+    }) => {
+      let update: Partial<OrganizationManagement> = {}
       if (action === 'activate') update = { status: 'active', archived_at: null }
       else if (action === 'inactivate') update = { status: 'inactive' }
       else if (action === 'archive') update = { status: 'archived', archived_at: new Date().toISOString() }
