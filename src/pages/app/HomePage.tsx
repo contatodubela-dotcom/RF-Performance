@@ -1,10 +1,14 @@
 import {
+  BookOpen,
   Building2,
+  CalendarDays,
   CheckCircle2,
   CheckSquare,
   Circle,
+  ClipboardCheck,
   Link2,
   MapPin,
+  MessageSquare,
   TrendingUp,
   UserCog,
   Users,
@@ -75,7 +79,7 @@ function CheckItem({ done, label }: CheckItemProps) {
   )
 }
 
-export default function HomePage() {
+function ManagementHome() {
   const { activeOrganization, profile, isAdmin } = useAuth()
   const orgId = activeOrganization?.id
 
@@ -432,5 +436,150 @@ export default function HomePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+interface OperationalModule {
+  title: string
+  description: string
+  icon: React.ElementType
+}
+
+function OperationalHome({
+  title,
+  description,
+  modules,
+}: {
+  title: string
+  description: string
+  modules: OperationalModule[]
+}) {
+  const { activeOrganization, profile } = useAuth()
+
+  return (
+    <div className="page-container">
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-gray-900">
+          Bom dia,{' '}
+          {profile?.preferred_name ||
+            profile?.full_name ||
+            'bem-vindo'}
+          !
+        </h1>
+        <p className="mt-1 text-sm text-gray-500">
+          {activeOrganization ? (
+            <span>
+              Organização:{' '}
+              <strong className="text-gray-700">
+                {activeOrganization.trade_name}
+              </strong>
+            </span>
+          ) : (
+            'Nenhuma organização ativa selecionada.'
+          )}
+        </p>
+      </div>
+
+      <section className="mb-6 rounded-xl border border-brand-200 bg-brand-50 p-5">
+        <h2 className="text-base font-semibold text-brand-900">
+          {title}
+        </h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-brand-800">
+          {description}
+        </p>
+      </section>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {modules.map(({ title: moduleTitle, description: moduleDescription, icon: Icon }) => (
+          <div key={moduleTitle} className="card p-5">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-700">
+              <Icon className="h-5 w-5 text-white" />
+            </div>
+            <h2 className="font-semibold text-gray-900">
+              {moduleTitle}
+            </h2>
+            <p className="mt-1 text-sm leading-5 text-gray-500">
+              {moduleDescription}
+            </p>
+            <p className="mt-3 text-xs font-medium text-brand-700">
+              Acesse pelo menu lateral
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const salespersonModules: OperationalModule[] = [
+  {
+    title: 'Reuniões',
+    description:
+      'Consulte os encontros e compromissos relacionados à sua rotina.',
+    icon: CalendarDays,
+  },
+  {
+    title: 'Treinamentos',
+    description:
+      'Acesse os conteúdos de desenvolvimento disponíveis para você.',
+    icon: BookOpen,
+  },
+  {
+    title: 'Avaliações',
+    description:
+      'Acompanhe as avaliações vinculadas ao seu desenvolvimento.',
+    icon: ClipboardCheck,
+  },
+  {
+    title: 'Feedbacks',
+    description:
+      'Consulte os feedbacks registrados para apoiar sua evolução.',
+    icon: MessageSquare,
+  },
+]
+
+const supervisorModules: OperationalModule[] = [
+  {
+    title: 'PDVs',
+    description:
+      'Acompanhe os pontos de venda permitidos ao seu perfil.',
+    icon: MapPin,
+  },
+  {
+    title: 'Equipes',
+    description:
+      'Acesse as equipes sob sua responsabilidade operacional.',
+    icon: Users2,
+  },
+  ...salespersonModules,
+]
+
+export default function HomePage() {
+  const {
+    isAdmin,
+    isDirector,
+    isSupervisor,
+  } = useAuth()
+
+  if (isAdmin || isDirector) {
+    return <ManagementHome />
+  }
+
+  if (isSupervisor) {
+    return (
+      <OperationalHome
+        title="Visão operacional da supervisão"
+        description="Acompanhe sua rotina tática e utilize os módulos liberados ao seu perfil. Indicadores globais, capacidade total, vagas e dados estratégicos da empresa permanecem restritos à direção."
+        modules={supervisorModules}
+      />
+    )
+  }
+
+  return (
+    <OperationalHome
+      title="Seu espaço de trabalho"
+      description="Acompanhe suas atividades de desenvolvimento e sua rotina comercial pelos módulos disponíveis. Informações estratégicas e indicadores globais da empresa não fazem parte deste perfil."
+      modules={salespersonModules}
+    />
   )
 }

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   getAdjustedMonthlyCapacityReference,
   getConfirmedActiveProducers,
@@ -23,20 +24,33 @@ import {
 export function useOrganizationStats(
   organizationId: string | undefined,
 ) {
+  const { user, isAdmin, isDirector } = useAuth()
+  const canViewStrategicData = isAdmin || isDirector
+
   return useQuery({
-    queryKey: ['org-stats', organizationId],
-    enabled: !!organizationId,
+    queryKey: ['org-stats', organizationId, user?.id],
+    enabled:
+      !!organizationId &&
+      !!user?.id &&
+      canViewStrategicData,
     staleTime: 1000 * 60 * 2,
     queryFn: async () => {
-      if (!organizationId) return null
+      if (
+        !organizationId ||
+        !user?.id ||
+        !canViewStrategicData
+      ) {
+        return null
+      }
 
       const [organizationRes, pdvRes, teamRes, memberRes] =
         await Promise.all([
-          supabase
-            .from('organizations')
-            .select('metadata')
-            .eq('id', organizationId)
-            .single(),
+          supabase.rpc(
+            'get_organization_strategic_metadata' as never,
+            {
+              p_organization_id: organizationId,
+            } as never,
+          ),
           supabase
             .from('sales_locations')
             .select('id, metadata')
@@ -60,11 +74,14 @@ export function useOrganizationStats(
       if (memberRes.error) throw memberRes.error
 
       const organizationMetadata =
-        organizationRes.data?.metadata as Record<string, unknown> | null
+        organizationRes.data as unknown as
+          | Record<string, unknown>
+          | null
       const setupMetadata = getSetupMetadata(organizationMetadata)
       const pdvs = pdvRes.data ?? []
       const teams = teamRes.data ?? []
       const members = memberRes.data ?? []
+
 
       const plannedSupervisorCount = teams.reduce(
         (total, team) =>
@@ -182,12 +199,24 @@ export function useOrganizationStats(
 export function useSetupChecklist(
   organizationId: string | undefined,
 ) {
+  const { user, isAdmin, isDirector } = useAuth()
+  const canViewStrategicData = isAdmin || isDirector
+
   return useQuery({
-    queryKey: ['setup-checklist', organizationId],
-    enabled: !!organizationId,
+    queryKey: ['setup-checklist', organizationId, user?.id],
+    enabled:
+      !!organizationId &&
+      !!user?.id &&
+      canViewStrategicData,
     staleTime: 1000 * 60,
     queryFn: async () => {
-      if (!organizationId) return null
+      if (
+        !organizationId ||
+        !user?.id ||
+        !canViewStrategicData
+      ) {
+        return null
+      }
 
       const [
         organizationRes,
@@ -198,11 +227,12 @@ export function useSetupChecklist(
         salespersonsRes,
         assignmentsRes,
       ] = await Promise.all([
-        supabase
-          .from('organizations')
-          .select('id, metadata')
-          .eq('id', organizationId)
-          .eq('status', 'active'),
+        supabase.rpc(
+          'get_organization_strategic_metadata' as never,
+          {
+            p_organization_id: organizationId,
+          } as never,
+        ),
         supabase
           .from('operations')
           .select('id')
@@ -251,10 +281,9 @@ export function useSetupChecklist(
       if (errors.length > 0) throw errors[0]
 
       const organizationMetadata =
-        organizationRes.data?.[0]?.metadata as
+        organizationRes.data as unknown as
           | Record<string, unknown>
           | null
-          | undefined
       const pdvs = pdvRes.data ?? []
       const supervisors = supervisorsRes.data ?? []
       const teams = teamsRes.data ?? []
@@ -324,7 +353,7 @@ export function useSetupChecklist(
         )
 
       return {
-        orgRegistered: (organizationRes.data?.length ?? 0) > 0,
+        orgRegistered: organizationMetadata != null,
         operationRegistered: (operationRes.data?.length ?? 0) > 0,
 
         pdvsReviewed,

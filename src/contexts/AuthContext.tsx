@@ -1,20 +1,30 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { Profile, Organization, OrganizationMember } from '@/types/database'
-import type { AuthContextType, AuthUser } from '@/types/auth'
+import type { Profile, OrganizationMember } from '@/types/database'
+import type {
+  ActiveOrganizationSummary,
+  AuthContextType,
+  AuthUser,
+} from '@/types/auth'
 
 const AuthContext = createContext<AuthContextType | null>(null)
+
+const ACTIVE_ORGANIZATION_COLUMNS =
+  'id, trade_name, slug, logo_url, status, source_system'
 
 function mapSupabaseUser(user: User): AuthUser {
   return { id: user.id, email: user.email! }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [activeMembership, setActiveMembership] = useState<OrganizationMember | null>(null)
-  const [activeOrganization, setActiveOrg] = useState<Organization | null>(null)
+  const [activeOrganization, setActiveOrg] =
+    useState<ActiveOrganizationSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,13 +52,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // PLATFORM_ADMIN: load first active org
     if (profileData.system_role === 'platform_admin') {
-      const { data: orgs } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: true })
-        .limit(1)
-      if (orgs && orgs.length > 0) setActiveOrg(orgs[0])
+      const { data: orgs, error: organizationError } =
+        await supabase
+          .from('organizations')
+          .select(ACTIVE_ORGANIZATION_COLUMNS)
+          .eq('status', 'active')
+          .order('trade_name', { ascending: true })
+          .limit(1)
+
+      if (organizationError) {
+        setError('Erro ao carregar a organização ativa.')
+        return
+      }
+
+      if (orgs && orgs.length > 0) {
+        setActiveOrg(
+          orgs[0] as ActiveOrganizationSummary,
+        )
+      }
       return
     }
 
@@ -75,13 +96,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setActiveMembership(membership)
 
-    const { data: org } = await supabase
-      .from('organizations')
-      .select('*')
-      .eq('id', membership.organization_id)
-      .single()
+    const { data: org, error: organizationError } =
+      await supabase
+        .from('organizations')
+        .select(ACTIVE_ORGANIZATION_COLUMNS)
+        .eq('id', membership.organization_id)
+        .single()
 
-    if (org) setActiveOrg(org)
+    if (organizationError || !org) {
+      setError('Erro ao carregar a organização vinculada.')
+      return
+    }
+
+    setActiveOrg(org as ActiveOrganizationSummary)
 
     // Update last access timestamp
     await supabase
@@ -91,12 +118,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const clearAuth = useCallback(() => {
+    queryClient.clear()
     setUser(null)
     setProfile(null)
     setActiveMembership(null)
     setActiveOrg(null)
     setError(null)
-  }, [])
+  }, [queryClient])
 
   useEffect(() => {
     let mounted = true

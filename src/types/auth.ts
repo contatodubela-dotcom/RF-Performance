@@ -1,4 +1,10 @@
-import type { Profile, Organization, OrganizationMember, OrgRole, SystemRole } from './database'
+import type {
+  Organization,
+  OrganizationMember,
+  OrgRole,
+  Profile,
+  SystemRole,
+} from './database'
 
 export interface AuthUser {
   id: string
@@ -7,11 +13,21 @@ export interface AuthUser {
 
 export type CurrentRole = SystemRole | OrgRole | null
 
+export type ActiveOrganizationSummary = Pick<
+  Organization,
+  | 'id'
+  | 'trade_name'
+  | 'slug'
+  | 'logo_url'
+  | 'status'
+  | 'source_system'
+>
+
 export interface AuthContextType {
   user: AuthUser | null
   profile: Profile | null
   activeMembership: OrganizationMember | null
-  activeOrganization: Organization | null
+  activeOrganization: ActiveOrganizationSummary | null
   loading: boolean
   error: string | null
 
@@ -29,6 +45,8 @@ export interface AuthContextType {
 
   // Actions
   signOut: () => Promise<void>
-  setActiveOrganization: (org: Organization | null) => void
+  setActiveOrganization: (
+    org: ActiveOrganizationSummary | null,
+  ) => void
   refreshProfile: () => Promise<void>
 }
