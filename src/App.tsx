@@ -19,6 +19,8 @@ import UpdatePasswordPage from '@/pages/auth/UpdatePasswordPage'
 
 // App pages
 import ActionsPage from '@/pages/app/ActionsPage'
+import AssessmentAttemptPage from '@/pages/app/AssessmentAttemptPage'
+import AssessmentResultPage from '@/pages/app/AssessmentResultPage'
 import EvaluationsPage from '@/pages/app/EvaluationsPage'
 import FeedbacksPage from '@/pages/app/FeedbacksPage'
 import GoalsPage from '@/pages/app/GoalsPage'
@@ -144,6 +146,21 @@ export default function App() {
                 element={authorized(
                   ROUTES.EVALUATIONS,
                   <EvaluationsPage />,
+                )}
+              />
+              <Route
+                path={`${ROUTES.EVALUATIONS}/:attemptId`}
+                element={authorized(
+                  ROUTES.EVALUATIONS,
+                  <AssessmentAttemptPage />,
+                )}
+              />
+
+              <Route
+                path={`${ROUTES.EVALUATIONS}/:attemptId/resultado`}
+                element={authorized(
+                  ROUTES.EVALUATIONS,
+                  <AssessmentResultPage />,
                 )}
               />
 
