@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock3,
+  Eye,
   LockKeyhole,
   PlayCircle,
   RefreshCw,
@@ -67,10 +68,12 @@ function AssessmentCard({
   assessment,
   isStarting,
   onStart,
+  onViewResult,
 }: {
   assessment: AvailableAssessment
   isStarting: boolean
   onStart: (assessment: AvailableAssessment) => void
+  onViewResult: (attemptId: string) => void
 }) {
   const nextAttempt = formatNextAttempt(assessment.next_attempt_at)
   const canOpen =
@@ -80,6 +83,10 @@ function AssessmentCard({
     assessment.availability === 'in_progress'
       ? 'Continuar avaliação'
       : 'Iniciar avaliação'
+  const hasGradedResult = Boolean(assessment.last_graded_attempt_id)
+  const resultActionLabel = canOpen
+    ? 'Ver último resultado'
+    : 'Ver resultado'
 
   return (
     <article className="card p-5">
@@ -162,17 +169,32 @@ function AssessmentCard({
           </p>
         )}
 
-        {canOpen && (
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => onStart(assessment)}
-              disabled={isStarting}
-            >
-              <PlayCircle className="mr-2 h-4 w-4" />
-              {isStarting ? 'Preparando...' : actionLabel}
-            </button>
+        {(hasGradedResult || canOpen) && (
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            {assessment.last_graded_attempt_id && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() =>
+                  onViewResult(assessment.last_graded_attempt_id!)
+                }
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                {resultActionLabel}
+              </button>
+            )}
+
+            {canOpen && (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => onStart(assessment)}
+                disabled={isStarting}
+              >
+                <PlayCircle className="mr-2 h-4 w-4" />
+                {isStarting ? 'Preparando...' : actionLabel}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -344,6 +366,11 @@ export default function EvaluationsPage() {
                 }
                 onStart={(selectedAssessment) =>
                   startMutation.mutate(selectedAssessment)
+                }
+                onViewResult={(attemptId) =>
+                  navigate(
+                    `${ROUTES.EVALUATIONS}/${attemptId}/resultado`,
+                  )
                 }
               />
             ))}

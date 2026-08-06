@@ -53,6 +53,7 @@ export interface AvailableAssessment {
   prerequisites_met: boolean
   attempts_used: number
   in_progress_attempt_id: string | null
+  last_graded_attempt_id: string | null
   last_attempt_status: AssessmentAttemptStatus | null
   last_attempt_passed: boolean | null
   next_attempt_at: string | null
