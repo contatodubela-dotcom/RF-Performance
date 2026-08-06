@@ -19,6 +19,7 @@ import UpdatePasswordPage from '@/pages/auth/UpdatePasswordPage'
 
 // App pages
 import ActionsPage from '@/pages/app/ActionsPage'
+import EvaluationsPage from '@/pages/app/EvaluationsPage'
 import FeedbacksPage from '@/pages/app/FeedbacksPage'
 import GoalsPage from '@/pages/app/GoalsPage'
 import HomePage from '@/pages/app/HomePage'
@@ -142,11 +143,7 @@ export default function App() {
                 path={ROUTES.EVALUATIONS}
                 element={authorized(
                   ROUTES.EVALUATIONS,
-                  <PlaceholderPage
-                    title="Avaliações"
-                    description="Avaliações de desempenho individual, comportamental e técnica por período."
-                    icon="ClipboardCheck"
-                  />,
+                  <EvaluationsPage />,
                 )}
               />
 
