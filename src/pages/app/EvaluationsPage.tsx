@@ -1,17 +1,22 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   Award,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
   LockKeyhole,
+  PlayCircle,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
+import { ROUTES } from '@/constants/routes'
 import {
   AssessmentServiceError,
   getAvailableAssessments,
+  startAssessmentAttempt,
 } from '@/services/assessmentService'
 import type {
   AssessmentAvailability,
@@ -58,8 +63,23 @@ function formatNextAttempt(value: string | null) {
   }).format(new Date(value))
 }
 
-function AssessmentCard({ assessment }: { assessment: AvailableAssessment }) {
+function AssessmentCard({
+  assessment,
+  isStarting,
+  onStart,
+}: {
+  assessment: AvailableAssessment
+  isStarting: boolean
+  onStart: (assessment: AvailableAssessment) => void
+}) {
   const nextAttempt = formatNextAttempt(assessment.next_attempt_at)
+  const canOpen =
+    assessment.availability === 'available' ||
+    assessment.availability === 'in_progress'
+  const actionLabel =
+    assessment.availability === 'in_progress'
+      ? 'Continuar avaliação'
+      : 'Iniciar avaliação'
 
   return (
     <article className="card p-5">
@@ -141,6 +161,20 @@ function AssessmentCard({ assessment }: { assessment: AvailableAssessment }) {
             Última tentativa aprovada.
           </p>
         )}
+
+        {canOpen && (
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => onStart(assessment)}
+              disabled={isStarting}
+            >
+              <PlayCircle className="mr-2 h-4 w-4" />
+              {isStarting ? 'Preparando...' : actionLabel}
+            </button>
+          </div>
+        )}
       </div>
     </article>
   )
@@ -149,6 +183,7 @@ function AssessmentCard({ assessment }: { assessment: AvailableAssessment }) {
 export default function EvaluationsPage() {
   const { activeOrganization, user, isAdmin } = useAuth()
   const organizationId = activeOrganization?.id
+  const navigate = useNavigate()
 
   const {
     data,
@@ -160,6 +195,27 @@ export default function EvaluationsPage() {
     queryKey: ['available-assessments', organizationId, user?.id],
     enabled: !!organizationId && !!user?.id && !isAdmin,
     queryFn: () => getAvailableAssessments(organizationId!),
+  })
+
+  const startMutation = useMutation({
+    mutationFn: (assessment: AvailableAssessment) => {
+      if (!organizationId) {
+        throw new Error('Organização ativa não encontrada.')
+      }
+
+      return startAssessmentAttempt(organizationId, assessment.test_id)
+    },
+    onSuccess: (attempt) => {
+      navigate(`${ROUTES.EVALUATIONS}/${attempt.attempt_id}`)
+    },
+    onError: (mutationError: Error) => {
+      const message =
+        mutationError instanceof AssessmentServiceError
+          ? mutationError.message
+          : 'Não foi possível iniciar a avaliação.'
+
+      toast.error(message)
+    },
   })
 
   if (isAdmin) {
@@ -282,6 +338,13 @@ export default function EvaluationsPage() {
               <AssessmentCard
                 key={assessment.test_id}
                 assessment={assessment}
+                isStarting={
+                  startMutation.isPending &&
+                  startMutation.variables?.test_id === assessment.test_id
+                }
+                onStart={(selectedAssessment) =>
+                  startMutation.mutate(selectedAssessment)
+                }
               />
             ))}
           </div>
