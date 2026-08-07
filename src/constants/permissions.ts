@@ -26,9 +26,10 @@ const TEAM_MANAGEMENT_ROLES: readonly AssignedRole[] = [
 /**
  * Matriz de acesso às rotas.
  *
- * Algumas áreas permanecem temporariamente restritas a administrador e
- * diretor até que as policies RLS sejam limitadas por equipe, responsável
- * ou usuário.
+ * O supervisor acessa somente páginas cujo backend já possui escopo por
+ * equipe/PDV. A página de usuários é liberada para permitir o cadastro de
+ * vendedores, mas a Edge Function continua sendo a barreira de escrita e
+ * restringe o convite às equipes gerenciadas pelo próprio supervisor.
  */
 export const ROUTE_ACCESS: Partial<
   Record<string, readonly AssignedRole[]>
@@ -57,7 +58,7 @@ export const ROUTE_ACCESS: Partial<
   [ROUTES.OPERATIONS]: MANAGEMENT_ROLES,
   [ROUTES.SALES_LOCATIONS]: TEAM_MANAGEMENT_ROLES,
   [ROUTES.TEAMS]: TEAM_MANAGEMENT_ROLES,
-  [ROUTES.USERS]: MANAGEMENT_ROLES,
+  [ROUTES.USERS]: TEAM_MANAGEMENT_ROLES,
   [ROUTES.SETTINGS]: MANAGEMENT_ROLES,
 }
 

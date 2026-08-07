@@ -1,17 +1,45 @@
 import { createClient, type SupabaseClient, type User } from 'npm:@supabase/supabase-js@2'
 
 type OrganizationRole = 'director' | 'supervisor' | 'salesperson'
+type CallerRole = 'platform_admin' | OrganizationRole
 
 type InviteRequest = {
   email?: unknown
   full_name?: unknown
   role?: unknown
   organization_id?: unknown
+  team_id?: unknown
 }
 
 type JsonRecord = Record<string, unknown>
 
+type CallerMembership = {
+  id: string
+  role: OrganizationRole
+}
+
+type TeamContext = {
+  id: string
+  organization_id: string
+  sales_location_id: string | null
+  supervisor_member_id: string | null
+  status: string
+  archived_at: string | null
+}
+
+type PreviousMembershipState = {
+  id: string
+  role: OrganizationRole
+  status: 'inactive' | 'archived'
+  archived_at: string | null
+  invited_at: string | null
+  joined_at: string | null
+}
+
+type MembershipAction = 'existing' | 'create' | 'reactivate'
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ALLOWED_ROLES: OrganizationRole[] = [
   'director',
   'supervisor',
@@ -130,6 +158,52 @@ async function removeNewlyInvitedUser(
   if (error) {
     console.error(
       '[invite-user] Falha ao compensar usuário recém-convidado.',
+      error.message,
+    )
+  }
+}
+
+async function compensateMembershipChange(
+  adminClient: SupabaseClient,
+  action: MembershipAction,
+  membershipId: string,
+  previousMembership: PreviousMembershipState | null,
+  callerId: string,
+): Promise<void> {
+  if (action === 'existing') return
+
+  if (action === 'create') {
+    const { error } = await adminClient
+      .from('organization_members')
+      .delete()
+      .eq('id', membershipId)
+
+    if (error) {
+      console.error(
+        '[invite-user] Falha ao remover vínculo criado durante compensação.',
+        error.message,
+      )
+    }
+    return
+  }
+
+  if (!previousMembership) return
+
+  const { error } = await adminClient
+    .from('organization_members')
+    .update({
+      role: previousMembership.role,
+      status: previousMembership.status,
+      archived_at: previousMembership.archived_at,
+      invited_at: previousMembership.invited_at,
+      joined_at: previousMembership.joined_at,
+      updated_by: callerId,
+    })
+    .eq('id', membershipId)
+
+  if (error) {
+    console.error(
+      '[invite-user] Falha ao restaurar vínculo reativado durante compensação.',
       error.message,
     )
   }
@@ -269,6 +343,10 @@ Deno.serve(async (request: Request) => {
     typeof body.organization_id === 'string'
       ? body.organization_id.trim()
       : ''
+  const teamId =
+    typeof body.team_id === 'string'
+      ? body.team_id.trim()
+      : ''
   const role =
     typeof body.role === 'string' &&
     ALLOWED_ROLES.includes(body.role as OrganizationRole)
@@ -309,6 +387,39 @@ Deno.serve(async (request: Request) => {
     )
   }
 
+  if (teamId && !UUID_PATTERN.test(teamId)) {
+    return jsonResponse(
+      {
+        error: 'Equipe inválida.',
+        code: 'INVALID_TEAM_ID',
+      },
+      400,
+      corsHeaders,
+    )
+  }
+
+  if (role === 'salesperson' && !teamId) {
+    return jsonResponse(
+      {
+        error: 'Selecione a equipe do vendedor.',
+        code: 'SALESPERSON_TEAM_REQUIRED',
+      },
+      400,
+      corsHeaders,
+    )
+  }
+
+  if (role === 'director' && teamId) {
+    return jsonResponse(
+      {
+        error: 'Diretores não devem ser vinculados a uma equipe pelo fluxo de convite.',
+        code: 'DIRECTOR_TEAM_NOT_ALLOWED',
+      },
+      400,
+      corsHeaders,
+    )
+  }
+
   const { data: callerProfile, error: callerProfileError } =
     await adminClient
       .from('profiles')
@@ -335,19 +446,21 @@ Deno.serve(async (request: Request) => {
   const isPlatformAdmin =
     callerProfile.system_role === 'platform_admin'
 
+  let callerRole: CallerRole = 'platform_admin'
+  let callerMembership: CallerMembership | null = null
+
   if (!isPlatformAdmin) {
-    const { data: directorMembership, error: membershipError } =
+    const { data: membership, error: membershipError } =
       await adminClient
         .from('organization_members')
-        .select('id')
+        .select('id, role')
         .eq('organization_id', organizationId)
         .eq('user_id', caller.id)
-        .eq('role', 'director')
         .eq('status', 'active')
         .is('archived_at', null)
         .maybeSingle()
 
-    if (membershipError || !directorMembership) {
+    if (membershipError || !membership) {
       return jsonResponse(
         {
           error:
@@ -359,7 +472,21 @@ Deno.serve(async (request: Request) => {
       )
     }
 
-    if (role === 'director') {
+    callerMembership = membership as CallerMembership
+    callerRole = callerMembership.role
+
+    if (callerRole === 'salesperson') {
+      return jsonResponse(
+        {
+          error: 'Vendedores não possuem permissão para convidar usuários.',
+          code: 'INVITE_PERMISSION_DENIED',
+        },
+        403,
+        corsHeaders,
+      )
+    }
+
+    if (callerRole === 'director' && role === 'director') {
       return jsonResponse(
         {
           error: 'Somente o administrador da plataforma pode convidar diretores.',
@@ -368,6 +495,30 @@ Deno.serve(async (request: Request) => {
         403,
         corsHeaders,
       )
+    }
+
+    if (callerRole === 'supervisor') {
+      if (role !== 'salesperson') {
+        return jsonResponse(
+          {
+            error: 'Supervisores podem cadastrar somente vendedores.',
+            code: 'SUPERVISOR_CAN_INVITE_ONLY_SALESPERSON',
+          },
+          403,
+          corsHeaders,
+        )
+      }
+
+      if (!teamId) {
+        return jsonResponse(
+          {
+            error: 'Selecione uma equipe sob sua responsabilidade.',
+            code: 'SUPERVISOR_TEAM_REQUIRED',
+          },
+          400,
+          corsHeaders,
+        )
+      }
     }
   }
 
@@ -389,6 +540,70 @@ Deno.serve(async (request: Request) => {
       404,
       corsHeaders,
     )
+  }
+
+  let teamContext: TeamContext | null = null
+
+  if (teamId) {
+    const { data: team, error: teamError } = await adminClient
+      .from('teams')
+      .select(
+        'id, organization_id, sales_location_id, supervisor_member_id, status, archived_at',
+      )
+      .eq('id', teamId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'active')
+      .is('archived_at', null)
+      .maybeSingle()
+
+    if (teamError || !team) {
+      return jsonResponse(
+        {
+          error: 'Equipe não encontrada ou inativa nesta organização.',
+          code: 'TEAM_NOT_FOUND',
+        },
+        404,
+        corsHeaders,
+      )
+    }
+
+    teamContext = team as TeamContext
+
+    if (!teamContext.sales_location_id) {
+      return jsonResponse(
+        {
+          error: 'A equipe precisa estar vinculada a um PDV antes de receber usuários.',
+          code: 'TEAM_LOCATION_REQUIRED',
+        },
+        409,
+        corsHeaders,
+      )
+    }
+
+    if (role === 'salesperson' && !teamContext.supervisor_member_id) {
+      return jsonResponse(
+        {
+          error: 'A equipe precisa ter um supervisor antes de receber vendedores.',
+          code: 'TEAM_SUPERVISOR_REQUIRED',
+        },
+        409,
+        corsHeaders,
+      )
+    }
+
+    if (
+      callerRole === 'supervisor' &&
+      teamContext.supervisor_member_id !== callerMembership?.id
+    ) {
+      return jsonResponse(
+        {
+          error: 'Você só pode cadastrar vendedores nas equipes sob sua responsabilidade.',
+          code: 'SUPERVISOR_TEAM_SCOPE_DENIED',
+        },
+        403,
+        corsHeaders,
+      )
+    }
   }
 
   let existingUser: User | null
@@ -464,6 +679,7 @@ Deno.serve(async (request: Request) => {
           organization_id: organizationId,
           organization_name: organization.trade_name,
           requested_role: role,
+          requested_team_id: teamId || null,
         },
       })
 
@@ -483,6 +699,17 @@ Deno.serve(async (request: Request) => {
     targetUserId = inviteData.user.id
     existingUser = inviteData.user
     inviteSent = true
+  }
+
+  if (!targetUserId) {
+    return jsonResponse(
+      {
+        error: 'Não foi possível determinar o usuário de destino.',
+        code: 'TARGET_USER_RESOLUTION_FAILED',
+      },
+      500,
+      corsHeaders,
+    )
   }
 
   const normalizedName =
@@ -548,46 +775,32 @@ Deno.serve(async (request: Request) => {
     )
   }
 
-  if (activeMembership) {
-    if (activeMembership.role !== role) {
-      return jsonResponse(
-        {
-          error:
-            'O usuário já possui vínculo ativo com outro perfil. Altere o perfil por um fluxo administrativo específico.',
-          code: 'ACTIVE_MEMBERSHIP_ROLE_CONFLICT',
-        },
-        409,
-        corsHeaders,
-      )
-    }
-
+  if (activeMembership && activeMembership.role !== role) {
     return jsonResponse(
       {
-        success: true,
-        user_id: targetUserId,
-        membership_id: activeMembership.id,
-        invite_sent: false,
-        already_member: true,
-        message:
-          'O usuário já possui vínculo ativo com esta organização.',
+        error:
+          'O usuário já possui vínculo ativo com outro perfil. Altere o perfil por um fluxo administrativo específico.',
+        code: 'ACTIVE_MEMBERSHIP_ROLE_CONFLICT',
       },
-      200,
+      409,
       corsHeaders,
     )
   }
 
   const { data: inactiveMembership, error: inactiveMembershipError } =
-    await adminClient
-      .from('organization_members')
-      .select('id, invited_at, joined_at')
-      .eq('organization_id', organizationId)
-      .eq('user_id', targetUserId)
-      .in('status', ['inactive', 'archived'])
-      .order('created_at', {
-        ascending: false,
-      })
-      .limit(1)
-      .maybeSingle()
+    activeMembership
+      ? { data: null, error: null }
+      : await adminClient
+          .from('organization_members')
+          .select('id, role, status, archived_at, invited_at, joined_at')
+          .eq('organization_id', organizationId)
+          .eq('user_id', targetUserId)
+          .in('status', ['inactive', 'archived'])
+          .order('created_at', {
+            ascending: false,
+          })
+          .limit(1)
+          .maybeSingle()
 
   if (inactiveMembershipError) {
     await removeNewlyInvitedUser(
@@ -606,16 +819,23 @@ Deno.serve(async (request: Request) => {
     )
   }
 
+  const previousMembership = inactiveMembership
+    ? inactiveMembership as PreviousMembershipState
+    : null
+
   const now = new Date().toISOString()
   const joinedAt =
     existingUser?.email_confirmed_at
-      ? inactiveMembership?.joined_at ?? now
-      : inactiveMembership?.joined_at ?? null
+      ? previousMembership?.joined_at ?? now
+      : previousMembership?.joined_at ?? null
 
   let membershipId: string
-  let membershipAction: 'create' | 'reactivate'
+  let membershipAction: MembershipAction
 
-  if (inactiveMembership) {
+  if (activeMembership) {
+    membershipId = activeMembership.id
+    membershipAction = 'existing'
+  } else if (previousMembership) {
     const { data: reactivatedMembership, error: reactivationError } =
       await adminClient
         .from('organization_members')
@@ -626,11 +846,11 @@ Deno.serve(async (request: Request) => {
           invited_at:
             inviteSent
               ? now
-              : inactiveMembership.invited_at,
+              : previousMembership.invited_at,
           joined_at: joinedAt,
           updated_by: caller.id,
         })
-        .eq('id', inactiveMembership.id)
+        .eq('id', previousMembership.id)
         .select('id')
         .single()
 
@@ -695,6 +915,158 @@ Deno.serve(async (request: Request) => {
     membershipAction = 'create'
   }
 
+  const failAfterMembership = async (
+    error: string,
+    code: string,
+    status: number,
+  ): Promise<Response> => {
+    await compensateMembershipChange(
+      adminClient,
+      membershipAction,
+      membershipId,
+      previousMembership,
+      caller.id,
+    )
+    await removeNewlyInvitedUser(
+      adminClient,
+      targetUserId,
+      inviteSent,
+    )
+
+    return jsonResponse({ error, code }, status, corsHeaders)
+  }
+
+  let hierarchyLinked = false
+
+  if (role === 'salesperson' && teamContext) {
+    const { data: activeAssignments, error: assignmentsError } =
+      await adminClient
+        .from('team_members')
+        .select('id, team_id')
+        .eq('organization_id', organizationId)
+        .eq('organization_member_id', membershipId)
+        .eq('status', 'active')
+        .is('archived_at', null)
+
+    if (assignmentsError) {
+      return await failAfterMembership(
+        'Não foi possível verificar a equipe atual do vendedor.',
+        'TEAM_ASSIGNMENT_LOOKUP_FAILED',
+        500,
+      )
+    }
+
+    if ((activeAssignments ?? []).length > 0) {
+      const sameTeam = (activeAssignments ?? []).find(
+        (assignment) => assignment.team_id === teamContext?.id,
+      )
+
+      if (!sameTeam || (activeAssignments ?? []).length > 1) {
+        return await failAfterMembership(
+          'O vendedor já possui vínculo ativo com outra equipe. Encerre o vínculo anterior antes de transferi-lo.',
+          'SALESPERSON_ALREADY_ASSIGNED',
+          409,
+        )
+      }
+
+      hierarchyLinked = true
+    } else {
+      const { error: assignmentError } = await adminClient
+        .from('team_members')
+        .insert({
+          organization_id: organizationId,
+          team_id: teamContext.id,
+          organization_member_id: membershipId,
+          membership_type: 'salesperson',
+          start_at: now,
+          status: 'active',
+          created_by: caller.id,
+          updated_by: caller.id,
+          metadata: {
+            assignment_source: 'invite-user',
+            assigned_by_role: callerRole,
+          },
+        })
+
+      if (assignmentError) {
+        console.error(
+          '[invite-user] Falha ao vincular vendedor à equipe.',
+          assignmentError.message,
+        )
+
+        return await failAfterMembership(
+          'Não foi possível vincular o vendedor à equipe selecionada.',
+          'TEAM_ASSIGNMENT_FAILED',
+          500,
+        )
+      }
+
+      hierarchyLinked = true
+    }
+  }
+
+  if (role === 'supervisor' && teamContext) {
+    if (
+      teamContext.supervisor_member_id &&
+      teamContext.supervisor_member_id !== membershipId
+    ) {
+      return await failAfterMembership(
+        'A equipe selecionada já possui outro supervisor.',
+        'TEAM_ALREADY_HAS_SUPERVISOR',
+        409,
+      )
+    }
+
+    if (teamContext.supervisor_member_id === membershipId) {
+      hierarchyLinked = true
+    } else {
+      const { data: updatedTeam, error: teamUpdateError } =
+        await adminClient
+          .from('teams')
+          .update({
+            supervisor_member_id: membershipId,
+            updated_by: caller.id,
+          })
+          .eq('id', teamContext.id)
+          .eq('organization_id', organizationId)
+          .is('supervisor_member_id', null)
+          .select('id')
+          .maybeSingle()
+
+      if (teamUpdateError) {
+        console.error(
+          '[invite-user] Falha ao vincular supervisor à equipe.',
+          teamUpdateError.message,
+        )
+
+        return await failAfterMembership(
+          'Não foi possível vincular o supervisor à equipe selecionada.',
+          'SUPERVISOR_TEAM_ASSIGNMENT_FAILED',
+          500,
+        )
+      }
+
+      if (!updatedTeam) {
+        const { data: currentTeam } = await adminClient
+          .from('teams')
+          .select('supervisor_member_id')
+          .eq('id', teamContext.id)
+          .eq('organization_id', organizationId)
+          .maybeSingle()
+
+        if (currentTeam?.supervisor_member_id !== membershipId) {
+          return await failAfterMembership(
+            'A equipe selecionada recebeu outro supervisor durante o cadastro. Atualize a página e tente novamente.',
+            'TEAM_SUPERVISOR_CONFLICT',
+            409,
+          )
+        }
+      }
+
+      hierarchyLinked = true
+    }
+  }
+
   const { error: auditError } = await adminClient
     .from('audit_logs')
     .insert({
@@ -705,7 +1077,11 @@ Deno.serve(async (request: Request) => {
           ? 'invite_sent'
           : membershipAction === 'reactivate'
             ? 'membership_reactivated'
-            : 'membership_created',
+            : membershipAction === 'create'
+              ? 'membership_created'
+              : hierarchyLinked
+                ? 'membership_hierarchy_confirmed'
+                : 'membership_existing',
       entity_type: 'organization_members',
       entity_id: membershipId,
       new_values: {
@@ -713,6 +1089,10 @@ Deno.serve(async (request: Request) => {
         role,
         invite_sent: inviteSent,
         organization_id: organizationId,
+        team_id: teamContext?.id ?? null,
+        sales_location_id: teamContext?.sales_location_id ?? null,
+        hierarchy_linked: hierarchyLinked,
+        actor_role: callerRole,
       },
     })
 
@@ -723,21 +1103,46 @@ Deno.serve(async (request: Request) => {
     )
   }
 
+  const alreadyMember = membershipAction === 'existing'
+  const responseStatus = alreadyMember ? 200 : 201
+
+  let message: string
+
+  if (role === 'salesperson' && hierarchyLinked) {
+    message = inviteSent
+      ? 'Convite enviado e vendedor vinculado à equipe com sucesso.'
+      : alreadyMember
+        ? 'O vendedor já possuía vínculo ativo; a equipe foi confirmada com sucesso.'
+        : membershipAction === 'reactivate'
+          ? 'Vínculo reativado e vendedor associado à equipe com sucesso.'
+          : 'Vendedor vinculado à organização e à equipe com sucesso.'
+  } else if (role === 'supervisor' && hierarchyLinked) {
+    message = inviteSent
+      ? 'Convite enviado e supervisor vinculado à equipe com sucesso.'
+      : 'Supervisor vinculado à equipe com sucesso.'
+  } else {
+    message = inviteSent
+      ? 'Convite enviado e vínculo criado com sucesso.'
+      : alreadyMember
+        ? 'O usuário já possui vínculo ativo com esta organização.'
+        : membershipAction === 'reactivate'
+          ? 'Vínculo reativado com sucesso. O usuário já possuía uma conta.'
+          : 'Vínculo criado com sucesso. O usuário já possuía uma conta.'
+  }
+
   return jsonResponse(
     {
       success: true,
       user_id: targetUserId,
       membership_id: membershipId,
       invite_sent: inviteSent,
-      already_member: false,
-      message:
-        inviteSent
-          ? 'Convite enviado e vínculo criado com sucesso.'
-          : membershipAction === 'reactivate'
-            ? 'Vínculo reativado com sucesso. O usuário já possuía uma conta.'
-            : 'Vínculo criado com sucesso. O usuário já possuía uma conta.',
+      already_member: alreadyMember,
+      hierarchy_linked: hierarchyLinked,
+      team_id: teamContext?.id ?? null,
+      sales_location_id: teamContext?.sales_location_id ?? null,
+      message,
     },
-    201,
+    responseStatus,
     corsHeaders,
   )
 })
