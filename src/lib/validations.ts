@@ -42,13 +42,24 @@ export const teamSchema = z.object({
   supervisor_member_id: z.string().uuid().optional().or(z.literal('')),
 })
 
-export const inviteUserSchema = z.object({
-  email: emailSchema,
-  full_name: z.string().min(2, 'Nome é obrigatório').max(200),
-  role: z.enum(['director', 'supervisor', 'salesperson'], {
-    errorMap: () => ({ message: 'Selecione um perfil' }),
-  }),
-})
+export const inviteUserSchema = z
+  .object({
+    email: emailSchema,
+    full_name: z.string().min(2, 'Nome é obrigatório').max(200),
+    role: z.enum(['director', 'supervisor', 'salesperson'], {
+      errorMap: () => ({ message: 'Selecione um perfil' }),
+    }),
+    team_id: z.string().uuid('Selecione uma equipe válida').optional().or(z.literal('')),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role === 'salesperson' && !data.team_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['team_id'],
+        message: 'Selecione a equipe do vendedor',
+      })
+    }
+  })
 
 export const profileUpdateSchema = z.object({
   full_name: z.string().min(2, 'Nome é obrigatório').max(200),
