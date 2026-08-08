@@ -384,11 +384,14 @@ export default function UsersPage() {
 
   const toggleMutation = useMutation({
     mutationFn: async ({ id, currentStatus }: { id: string; currentStatus: string }) => {
+      if (!orgId) throw new Error('Nenhuma organizacao ativa.')
+
       const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
       const { error } = await supabase
         .from('organization_members')
         .update({ status: newStatus, updated_by: profile?.id })
         .eq('id', id)
+        .eq('organization_id', orgId)
 
       if (error) throw error
     },
@@ -515,7 +518,9 @@ export default function UsersPage() {
                         {formatRelativeDate(p?.last_access_at)}
                       </td>
                       <td className="table-td text-right">
-                        {canManageUsers && m.user_id !== profile?.id && (
+                        {canManageUsers &&
+                          m.user_id !== profile?.id &&
+                          (isAdmin || m.role !== ORG_ROLES.DIRECTOR) && (
                           <button
                             onClick={() => setToggleConfirm({ id: m.id, name: displayName, status: m.status })}
                             className={`p-1.5 rounded text-sm ${m.status === 'active' ? 'text-gray-400 hover:text-yellow-600 hover:bg-yellow-50' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
