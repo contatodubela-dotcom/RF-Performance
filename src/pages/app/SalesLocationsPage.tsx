@@ -7,6 +7,7 @@ import {
   Clock3,
   MapPin,
   Pencil,
+  Plus,
   ToggleLeft,
   ToggleRight,
   Users,
@@ -42,17 +43,38 @@ type FormData = z.infer<typeof salesLocationSchema>
 
 function PDVForm({
   pdv,
+  orgId,
   onClose,
 }: {
-  pdv: SalesLocation
+  pdv?: SalesLocation
+  orgId: string
   onClose: () => void
 }) {
   const { profile } = useAuth()
   const qc = useQueryClient()
-  const setup = getSetupMetadata(pdv.metadata)
+  const isEdit = !!pdv
+  const setup = getSetupMetadata(pdv?.metadata)
+  const [operationId, setOperationId] = useState(pdv?.operation_id ?? '')
   const [confirmData, setConfirmData] = useState(
-    isSetupConfirmed(pdv.metadata),
+    isSetupConfirmed(pdv?.metadata),
   )
+
+  const { data: operations, isLoading: operationsLoading } = useQuery({
+    queryKey: ['pdv-form-operations', orgId],
+    enabled: !isEdit,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('operations')
+        .select('id, name')
+        .eq('organization_id', orgId)
+        .eq('status', 'active')
+        .is('archived_at', null)
+        .order('name')
+
+      if (error) throw error
+      return data ?? []
+    },
+  })
 
   const {
     register,
@@ -61,18 +83,22 @@ function PDVForm({
   } = useForm<FormData>({
     resolver: zodResolver(salesLocationSchema),
     defaultValues: {
-      name: pdv.name,
-      slug: pdv.slug,
-      location_type: pdv.location_type,
-      shopping_name: pdv.shopping_name ?? '',
-      address_line: pdv.address_line ?? '',
-      city: pdv.city ?? '',
-      state_code: pdv.state_code ?? '',
+      name: pdv?.name ?? '',
+      slug: pdv?.slug ?? '',
+      location_type: pdv?.location_type ?? 'shopping_kiosk',
+      shopping_name: pdv?.shopping_name ?? '',
+      address_line: pdv?.address_line ?? '',
+      city: pdv?.city ?? '',
+      state_code: pdv?.state_code ?? '',
     },
   })
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
+      if (!isEdit && !operationId) {
+        throw new Error('Selecione a operação do PDV.')
+      }
+
       if (
         confirmData &&
         (!data.shopping_name || !data.city || !data.state_code)
@@ -82,35 +108,57 @@ function PDVForm({
         )
       }
 
+      const payload = {
+        name: data.name,
+        slug: data.slug,
+        location_type: data.location_type,
+        shopping_name: data.shopping_name || null,
+        address_line: data.address_line || null,
+        city: data.city || null,
+        state_code: data.state_code?.toUpperCase() || null,
+        metadata: updateSetupMetadata(pdv?.metadata, {
+          confirmed: confirmData,
+          userId: profile?.id,
+          plannedSalespersonCapacity:
+            setup.planned_salesperson_capacity,
+          plannedSupervisorPositions:
+            setup.planned_supervisor_positions,
+        }),
+        updated_by: profile?.id,
+      }
+
+      if (pdv) {
+        const { error } = await supabase
+          .from('sales_locations')
+          .update(payload)
+          .eq('id', pdv.id)
+          .eq('organization_id', orgId)
+
+        if (error) throw error
+        return
+      }
+
       const { error } = await supabase
         .from('sales_locations')
-        .update({
-          name: data.name,
-          slug: data.slug,
-          location_type: data.location_type,
-          shopping_name: data.shopping_name || null,
-          address_line: data.address_line || null,
-          city: data.city || null,
-          state_code: data.state_code?.toUpperCase() || null,
-          metadata: updateSetupMetadata(pdv.metadata, {
-            confirmed: confirmData,
-            userId: profile?.id,
-            plannedSalespersonCapacity:
-              setup.planned_salesperson_capacity,
-            plannedSupervisorPositions:
-              setup.planned_supervisor_positions,
-          }),
-          updated_by: profile?.id,
+        .insert({
+          ...payload,
+          organization_id: orgId,
+          operation_id: operationId,
+          source_system: 'rf_performance',
+          created_by: profile?.id,
         })
-        .eq('id', pdv.id)
 
       if (error) throw error
     },
     onSuccess: () => {
       toast.success(
-        confirmData
-          ? 'PDV atualizado e confirmado.'
-          : 'PDV atualizado como dado provisório.',
+        isEdit
+          ? confirmData
+            ? 'PDV atualizado e confirmado.'
+            : 'PDV atualizado como dado provisório.'
+          : confirmData
+            ? 'PDV criado e confirmado.'
+            : 'PDV criado como dado provisório.',
       )
       qc.invalidateQueries({ queryKey: ['sales-locations'] })
       qc.invalidateQueries({ queryKey: ['org-stats'] })
@@ -125,10 +173,34 @@ function PDVForm({
       onSubmit={handleSubmit((data) => mutation.mutate(data))}
       className="space-y-4"
     >
-      {isTemplateRecord(pdv.metadata) && (
+      {pdv && isTemplateRecord(pdv.metadata) && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           Este registro veio do template de apresentação. Substitua os dados
           provisórios pelas informações reais quando forem confirmadas.
+        </div>
+      )}
+
+      {!isEdit && (
+        <div>
+          <label className="form-label">Operação *</label>
+          <select
+            value={operationId}
+            onChange={(event) => setOperationId(event.target.value)}
+            className="form-input"
+            disabled={operationsLoading}
+          >
+            <option value="">Selecione...</option>
+            {operations?.map((operation) => (
+              <option key={operation.id} value={operation.id}>
+                {operation.name}
+              </option>
+            ))}
+          </select>
+          {!operationsLoading && (operations?.length ?? 0) === 0 && (
+            <p className="mt-1 text-xs text-amber-700">
+              Nenhuma operação ativa está disponível nesta organização.
+            </p>
+          )}
         </div>
       )}
 
@@ -224,10 +296,14 @@ function PDVForm({
         </button>
         <button
           type="submit"
-          disabled={mutation.isPending}
+          disabled={mutation.isPending || (!isEdit && operationsLoading)}
           className="btn-primary"
         >
-          {mutation.isPending ? 'Salvando...' : 'Salvar alterações'}
+          {mutation.isPending
+            ? 'Salvando...'
+            : isEdit
+              ? 'Salvar alterações'
+              : 'Criar PDV'}
         </button>
       </div>
     </form>
@@ -235,9 +311,10 @@ function PDVForm({
 }
 
 export default function SalesLocationsPage() {
-  const { activeOrganization, profile, isAdmin } = useAuth()
+  const { activeOrganization, profile } = useAuth()
   const { canManagePDVs } = usePermissions()
   const qc = useQueryClient()
+  const [formOpen, setFormOpen] = useState(false)
   const [editPDV, setEditPDV] = useState<SalesLocation | undefined>()
   const [toggleConfirm, setToggleConfirm] = useState<SalesLocation | null>(
     null,
@@ -249,16 +326,14 @@ export default function SalesLocationsPage() {
     queryKey: ['sales-locations', orgId],
     enabled: !!orgId,
     queryFn: async () => {
-      let query = supabase
+      if (!orgId) return []
+
+      const { data, error } = await supabase
         .from('sales_locations')
         .select('*')
+        .eq('organization_id', orgId)
         .order('name')
 
-      if (!isAdmin && orgId) {
-        query = query.eq('organization_id', orgId)
-      }
-
-      const { data, error } = await query
       if (error) throw error
       return data as SalesLocation[]
     },
@@ -266,8 +341,11 @@ export default function SalesLocationsPage() {
 
   const toggleMutation = useMutation({
     mutationFn: async (location: SalesLocation) => {
+      if (!orgId) throw new Error('Nenhuma organização ativa.')
+
       const newStatus =
         location.status === 'active' ? 'inactive' : 'active'
+
       const { error } = await supabase
         .from('sales_locations')
         .update({
@@ -275,6 +353,7 @@ export default function SalesLocationsPage() {
           updated_by: profile?.id,
         })
         .eq('id', location.id)
+        .eq('organization_id', orgId)
 
       if (error) throw error
     },
@@ -302,7 +381,20 @@ export default function SalesLocationsPage() {
     <div className="page-container">
       <PageHeader
         title="Pontos de Venda (PDVs)"
-        description="Edite os pontos de venda modelo e confirme os dados reais durante a implantação."
+        description="Gerencie os pontos de venda da organização ativa."
+        action={
+          canManagePDVs ? (
+            <button
+              onClick={() => {
+                setEditPDV(undefined)
+                setFormOpen(true)
+              }}
+              className="btn-primary"
+            >
+              <Plus className="h-4 w-4" /> Novo PDV
+            </button>
+          ) : undefined
+        }
       />
 
       {isLoading ? (
@@ -313,7 +405,11 @@ export default function SalesLocationsPage() {
         <EmptyState
           icon={MapPin}
           title="Nenhum PDV encontrado"
-          description="Os PDVs são criados com a estrutura operacional."
+          description={
+            canManagePDVs
+              ? 'Crie o primeiro PDV desta organização.'
+              : 'Nenhum PDV está disponível para esta organização.'
+          }
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -416,7 +512,10 @@ export default function SalesLocationsPage() {
                 {canManagePDVs && (
                   <div className="flex items-center gap-2 border-t border-gray-100 pt-3">
                     <button
-                      onClick={() => setEditPDV(location)}
+                      onClick={() => {
+                        setEditPDV(location)
+                        setFormOpen(true)
+                      }}
                       className="btn-secondary flex-1 py-1.5 text-xs"
                     >
                       <Pencil className="h-3.5 w-3.5" /> Editar e confirmar
@@ -449,21 +548,24 @@ export default function SalesLocationsPage() {
       )}
 
       <Dialog
-        open={!!editPDV}
+        open={formOpen}
         onOpenChange={(open) => {
+          setFormOpen(open)
           if (!open) setEditPDV(undefined)
         }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar PDV</DialogTitle>
+            <DialogTitle>{editPDV ? 'Editar PDV' : 'Novo PDV'}</DialogTitle>
           </DialogHeader>
-          {editPDV && (
-            <PDVForm
-              pdv={editPDV}
-              onClose={() => setEditPDV(undefined)}
-            />
-          )}
+          <PDVForm
+            pdv={editPDV}
+            orgId={orgId}
+            onClose={() => {
+              setFormOpen(false)
+              setEditPDV(undefined)
+            }}
+          />
         </DialogContent>
       </Dialog>
 

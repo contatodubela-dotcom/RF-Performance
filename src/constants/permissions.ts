@@ -12,6 +12,10 @@ const ALL_ROLES: readonly AssignedRole[] = [
   'salesperson',
 ]
 
+const PLATFORM_ADMIN_ROLES: readonly AssignedRole[] = [
+  'platform_admin',
+]
+
 const MANAGEMENT_ROLES: readonly AssignedRole[] = [
   'platform_admin',
   'director',
@@ -54,7 +58,7 @@ export const ROUTE_ACCESS: Partial<
   [ROUTES.REPORTS]: MANAGEMENT_ROLES,
 
   // Administração
-  [ROUTES.ORGANIZATIONS]: MANAGEMENT_ROLES,
+  [ROUTES.ORGANIZATIONS]: PLATFORM_ADMIN_ROLES,
   [ROUTES.OPERATIONS]: MANAGEMENT_ROLES,
   [ROUTES.SALES_LOCATIONS]: TEAM_MANAGEMENT_ROLES,
   [ROUTES.TEAMS]: TEAM_MANAGEMENT_ROLES,
