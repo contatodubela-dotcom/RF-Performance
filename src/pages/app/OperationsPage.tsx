@@ -50,7 +50,11 @@ function OpForm({ op, orgId, onClose }: { op?: Operation; orgId: string; onClose
         updated_by: profile?.id,
       }
       if (op) {
-        const { error } = await supabase.from('operations').update(payload).eq('id', op.id)
+        const { error } = await supabase
+          .from('operations')
+          .update(payload)
+          .eq('id', op.id)
+          .eq('organization_id', orgId)
         if (error) throw error
       } else {
         const { error } = await supabase.from('operations').insert({ ...payload, created_by: profile?.id })
@@ -103,7 +107,7 @@ function OpForm({ op, orgId, onClose }: { op?: Operation; orgId: string; onClose
 }
 
 export default function OperationsPage() {
-  const { activeOrganization, profile, isAdmin } = useAuth()
+  const { activeOrganization, profile } = useAuth()
   const { canManageOperations } = usePermissions()
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
@@ -117,9 +121,14 @@ export default function OperationsPage() {
     queryKey: ['operations', orgId],
     enabled: !!orgId,
     queryFn: async () => {
-      let q = supabase.from('operations').select('*').order('name')
-      if (!isAdmin && orgId) q = q.eq('organization_id', orgId)
-      const { data, error } = await q
+      if (!orgId) return []
+
+      const { data, error } = await supabase
+        .from('operations')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('name')
+
       if (error) throw error
       return data as Operation[]
     },
@@ -127,9 +136,18 @@ export default function OperationsPage() {
 
   const archiveMutation = useMutation({
     mutationFn: async (op: Operation) => {
-      const { error } = await supabase.from('operations').update({
-        status: 'archived', archived_at: new Date().toISOString(), updated_by: profile?.id,
-      }).eq('id', op.id)
+      if (!orgId) throw new Error('Nenhuma organização ativa.')
+
+      const { error } = await supabase
+        .from('operations')
+        .update({
+          status: 'archived',
+          archived_at: new Date().toISOString(),
+          updated_by: profile?.id,
+        })
+        .eq('id', op.id)
+        .eq('organization_id', orgId)
+
       if (error) throw error
     },
     onSuccess: () => { toast.success('Operação arquivada.'); qc.invalidateQueries({ queryKey: ['operations'] }) },

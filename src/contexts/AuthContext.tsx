@@ -14,6 +14,10 @@ const AuthContext = createContext<AuthContextType | null>(null)
 const ACTIVE_ORGANIZATION_COLUMNS =
   'id, trade_name, slug, logo_url, status, source_system'
 
+function getAdminOrganizationStorageKey(userId: string) {
+  return `rf-performance:admin-active-organization:${userId}`
+}
+
 function mapSupabaseUser(user: User): AuthUser {
   return { id: user.id, email: user.email! }
 }
@@ -50,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setProfile(profileData)
 
-    // PLATFORM_ADMIN: load first active org
+    // PLATFORM_ADMIN: restore the last selected active organization when possible.
     if (profileData.system_role === 'platform_admin') {
       const { data: orgs, error: organizationError } =
         await supabase
@@ -58,18 +62,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select(ACTIVE_ORGANIZATION_COLUMNS)
           .eq('status', 'active')
           .order('trade_name', { ascending: true })
-          .limit(1)
 
       if (organizationError) {
         setError('Erro ao carregar a organização ativa.')
         return
       }
 
-      if (orgs && orgs.length > 0) {
-        setActiveOrg(
-          orgs[0] as ActiveOrganizationSummary,
-        )
+      const activeOrganizations =
+        (orgs ?? []) as ActiveOrganizationSummary[]
+      const storageKey = getAdminOrganizationStorageKey(userId)
+      const storedOrganizationId = window.localStorage.getItem(storageKey)
+      const selectedOrganization =
+        activeOrganizations.find(
+          (organization) => organization.id === storedOrganizationId,
+        ) ?? activeOrganizations[0] ?? null
+
+      setActiveOrg(selectedOrganization)
+
+      if (selectedOrganization) {
+        window.localStorage.setItem(storageKey, selectedOrganization.id)
+      } else {
+        window.localStorage.removeItem(storageKey)
       }
+
       return
     }
 
@@ -172,6 +187,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut()
   }
 
+  const setActiveOrganization = useCallback((
+    organization: ActiveOrganizationSummary | null,
+  ) => {
+    if (profile?.system_role !== 'platform_admin') return
+    if (organization && organization.status !== 'active') return
+
+    if (user?.id) {
+      const storageKey = getAdminOrganizationStorageKey(user.id)
+      if (organization) {
+        window.localStorage.setItem(storageKey, organization.id)
+      } else {
+        window.localStorage.removeItem(storageKey)
+      }
+    }
+
+    // Keep the global organizations list, but discard organization-scoped cache.
+    queryClient.removeQueries({
+      predicate: (query) => query.queryKey[0] !== 'organizations',
+    })
+    setActiveOrg(organization)
+  }, [profile?.system_role, queryClient, user?.id])
+
   const isAdmin = profile?.system_role === 'platform_admin'
   const isDirector = !isAdmin && activeMembership?.role === 'director'
   const isSupervisor = !isAdmin && activeMembership?.role === 'supervisor'
@@ -194,7 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       canManageTeams: isAdmin || isDirector,
       canViewAdmin: isAdmin || isDirector,
       signOut,
-      setActiveOrganization: setActiveOrg,
+      setActiveOrganization,
       refreshProfile: () => user ? loadUserData(user.id) : Promise.resolve(),
     }}>
       {children}

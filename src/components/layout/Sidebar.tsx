@@ -1,5 +1,7 @@
 import type { ElementType } from 'react'
-import { NavLink } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   BarChart2,
   BookOpen,
@@ -24,7 +26,9 @@ import { canAccessRoute } from '@/constants/permissions'
 import { ROLE_LABELS } from '@/constants/roles'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 import { cn, getInitials } from '@/lib/utils'
+import type { ActiveOrganizationSummary } from '@/types/auth'
 
 interface NavItem {
   label: string
@@ -158,7 +162,60 @@ export default function Sidebar({
     activeOrganization,
     currentRole,
     isAdmin,
+    setActiveOrganization,
   } = useAuth()
+  const navigate = useNavigate()
+
+  const {
+    data: adminOrganizations = [],
+    isLoading: adminOrganizationsLoading,
+  } = useQuery({
+    queryKey: ['organizations', 'active-switcher'],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('id, trade_name, slug, logo_url, status, source_system')
+        .eq('status', 'active')
+        .order('trade_name', { ascending: true })
+
+      if (error) throw error
+      return (data ?? []) as ActiveOrganizationSummary[]
+    },
+  })
+
+  useEffect(() => {
+    if (!isAdmin || adminOrganizationsLoading || adminOrganizations.length === 0) {
+      return
+    }
+
+    const activeOrganizationStillAvailable = adminOrganizations.some(
+      (organization) => organization.id === activeOrganization?.id,
+    )
+
+    if (!activeOrganizationStillAvailable) {
+      setActiveOrganization(adminOrganizations[0])
+      navigate(ROUTES.HOME)
+    }
+  }, [
+    activeOrganization?.id,
+    adminOrganizations,
+    adminOrganizationsLoading,
+    isAdmin,
+    navigate,
+    setActiveOrganization,
+  ])
+
+  const handleOrganizationChange = (organizationId: string) => {
+    const organization = adminOrganizations.find(
+      (item) => item.id === organizationId,
+    )
+    if (!organization || organization.id === activeOrganization?.id) return
+
+    setActiveOrganization(organization)
+    navigate(ROUTES.HOME)
+    onClose()
+  }
 
   const displayName =
     profile?.preferred_name ||
@@ -227,13 +284,34 @@ export default function Sidebar({
         {/* Organização ativa */}
         {activeOrganization && (
           <div className="border-b border-brand-800 bg-brand-800/60 px-4 py-2.5">
-            <p className="truncate text-xs font-medium text-green-400">
-              {activeOrganization.trade_name}
-            </p>
-
-            {isAdmin && (
-              <p className="text-xs text-green-500/70">
-                Modo administrador
+            {isAdmin ? (
+              <>
+                <label
+                  htmlFor="active-organization-switcher"
+                  className="block text-[11px] font-medium uppercase tracking-wide text-green-500/70"
+                >
+                  Organização ativa
+                </label>
+                <select
+                  id="active-organization-switcher"
+                  value={activeOrganization.id}
+                  onChange={(event) => handleOrganizationChange(event.target.value)}
+                  disabled={adminOrganizationsLoading || adminOrganizations.length === 0}
+                  className="mt-1 w-full rounded-md border border-brand-700 bg-brand-950/40 px-2 py-1.5 text-xs font-medium text-white outline-none focus:border-green-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {adminOrganizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.trade_name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-green-500/70">
+                  Modo administrador
+                </p>
+              </>
+            ) : (
+              <p className="truncate text-xs font-medium text-green-400">
+                {activeOrganization.trade_name}
               </p>
             )}
           </div>
