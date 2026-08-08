@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Pencil, Archive } from 'lucide-react'
+import { Plus, Pencil, Archive, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
@@ -114,6 +114,7 @@ export default function OperationsPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editOp, setEditOp] = useState<Operation | undefined>()
   const [confirmArchive, setConfirmArchive] = useState<Operation | null>(null)
+  const [confirmRestore, setConfirmRestore] = useState<Operation | null>(null)
 
   const orgId = activeOrganization?.id
 
@@ -151,6 +152,26 @@ export default function OperationsPage() {
       if (error) throw error
     },
     onSuccess: () => { toast.success('Operação arquivada.'); qc.invalidateQueries({ queryKey: ['operations'] }) },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: async (op: Operation) => {
+      if (!orgId) throw new Error('Nenhuma organização ativa.')
+
+      const { error } = await supabase
+        .from('operations')
+        .update({
+          status: 'active',
+          archived_at: null,
+          updated_by: profile?.id,
+        })
+        .eq('id', op.id)
+        .eq('organization_id', orgId)
+
+      if (error) throw error
+    },
+    onSuccess: () => { toast.success('Operação restaurada.'); qc.invalidateQueries({ queryKey: ['operations'] }) },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -207,14 +228,22 @@ export default function OperationsPage() {
                     <td className="table-td"><StatusBadge status={op.status} /></td>
                     <td className="table-td hidden md:table-cell text-gray-500 text-xs">{formatDateTime(op.created_at)}</td>
                     <td className="table-td text-right">
-                      {canManageOperations && op.status !== 'archived' && (
+                      {canManageOperations && (
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => { setEditOp(op); setFormOpen(true) }} className="p-1.5 rounded text-gray-400 hover:text-brand-700 hover:bg-brand-50" title="Editar">
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button onClick={() => setConfirmArchive(op)} className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50" title="Arquivar">
-                            <Archive className="h-4 w-4" />
-                          </button>
+                          {op.status === 'archived' ? (
+                            <button onClick={() => setConfirmRestore(op)} className="p-1.5 rounded text-gray-400 hover:text-brand-700 hover:bg-brand-50" title="Restaurar">
+                              <RotateCcw className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <>
+                              <button onClick={() => { setEditOp(op); setFormOpen(true) }} className="p-1.5 rounded text-gray-400 hover:text-brand-700 hover:bg-brand-50" title="Editar">
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button onClick={() => setConfirmArchive(op)} className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50" title="Arquivar">
+                                <Archive className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </td>
@@ -241,6 +270,16 @@ export default function OperationsPage() {
         variant="destructive"
         onConfirm={() => { if (confirmArchive) archiveMutation.mutate(confirmArchive); setConfirmArchive(null) }}
         onCancel={() => setConfirmArchive(null)}
+      />
+
+      <ConfirmDialog
+        open={!!confirmRestore}
+        title="Restaurar operação?"
+        description={`A operação "${confirmRestore?.name}" voltará ao status ativo e poderá receber novos vínculos.`}
+        confirmLabel="Restaurar"
+        variant="default"
+        onConfirm={() => { if (confirmRestore) restoreMutation.mutate(confirmRestore); setConfirmRestore(null) }}
+        onCancel={() => setConfirmRestore(null)}
       />
     </div>
   )
