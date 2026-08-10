@@ -371,7 +371,7 @@ export default function AssessmentAttemptPage() {
           </div>
 
           <div className="space-y-3">
-            {currentItem.options.map((option) => {
+            {currentItem.options.map((option, optionIndex) => {
               const selected = displayedSelection === option.code
 
               return (
@@ -399,7 +399,7 @@ export default function AssessmentAttemptPage() {
                         : 'border-gray-300 text-gray-600'
                     }`}
                   >
-                    {option.code}
+                    {String.fromCharCode(65 + optionIndex)}
                   </span>
                   <span className="pt-0.5 text-sm leading-6 text-gray-800">
                     {option.text}

@@ -64,7 +64,7 @@ function ReviewQuestion({ item }: { item: AssessmentReviewItem }) {
       </div>
 
       <div className="mt-4 space-y-2">
-        {item.options.map((option) => {
+        {item.options.map((option, optionIndex) => {
           const selected = item.selected_option_code === option.code
           const correct = item.correct_option_code === option.code
 
@@ -88,7 +88,7 @@ function ReviewQuestion({ item }: { item: AssessmentReviewItem }) {
                       : 'border-gray-300 text-gray-600'
                 }`}
               >
-                {option.code}
+                {String.fromCharCode(65 + optionIndex)}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="leading-5 text-gray-800">{option.text}</p>
