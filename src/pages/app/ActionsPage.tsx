@@ -12,9 +12,9 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import EmptyState from '@/components/shared/EmptyState'
 
 export default function ActionsPage() {
-  const { activeOrganization, isAdmin, isDirector, isSupervisor, profile } = useAuth()
+  const { activeOrganization, isAdmin, isDirector, profile } = useAuth()
   const orgId = activeOrganization?.id
-  const canUpdate = isAdmin || isDirector || isSupervisor
+  const canUpdate = isAdmin || isDirector
   const qc = useQueryClient()
   const [statusFilter, setStatusFilter] = useState('all')
   const [phaseFilter, setPhaseFilter] = useState('all')

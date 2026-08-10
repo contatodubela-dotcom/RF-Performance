@@ -12,7 +12,7 @@ export function usePermissions() {
     // Page/feature access
     canViewOrganizations: isAdmin,
     canManageOrganizations: isAdmin,
-    canViewOperations: isAdmin || isDirector || isSupervisor || isSalesperson,
+    canViewOperations: isAdmin || isDirector,
     canManageOperations: isAdmin || isDirector,
     canViewPDVs: isAdmin || isDirector || isSupervisor,
     canManagePDVs: isAdmin || isDirector,
