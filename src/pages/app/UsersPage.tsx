@@ -38,8 +38,42 @@ type InviteResult = {
 
 type MemberProfile = Pick<Profile, 'full_name' | 'email' | 'preferred_name' | 'last_access_at'>
 
+type MemberTeamContext = {
+  team_id: string
+  team_name: string
+  sales_location_id: string | null
+  sales_location_name: string | null
+}
+
 type OrganizationMemberRow = OrganizationMember & {
   profile: MemberProfile | null
+  team_contexts?: MemberTeamContext[]
+}
+
+type SupervisorTeamMemberRow = {
+  organization_member_id: string
+  organization_member:
+    | (OrganizationMember & {
+        profile: MemberProfile | MemberProfile[] | null
+      })
+    | (OrganizationMember & {
+        profile: MemberProfile | MemberProfile[] | null
+      })[]
+    | null
+  team:
+    | {
+        id: string
+        name: string
+        sales_location_id: string | null
+        sales_location: { name: string } | { name: string }[] | null
+      }
+    | {
+        id: string
+        name: string
+        sales_location_id: string | null
+        sales_location: { name: string } | { name: string }[] | null
+      }[]
+    | null
 }
 
 type ProfileRelation = {
@@ -64,6 +98,64 @@ type InviteTeamOption = {
 function firstRelation<T>(relation: T | T[] | null | undefined): T | null {
   if (Array.isArray(relation)) return relation[0] ?? null
   return relation ?? null
+}
+
+function readableError(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+function normalizeSupervisorMembers(
+  rows: SupervisorTeamMemberRow[],
+): OrganizationMemberRow[] {
+  const membersById = new Map<string, OrganizationMemberRow>()
+
+  for (const row of rows) {
+    const member = firstRelation(row.organization_member)
+    if (!member || member.role !== ORG_ROLES.SALESPERSON) continue
+
+    const profile = firstRelation(member.profile)
+    const team = firstRelation(row.team)
+    const salesLocation = firstRelation(team?.sales_location)
+
+    const current = membersById.get(member.id)
+    const teamContext = team
+      ? {
+          team_id: team.id,
+          team_name: team.name,
+          sales_location_id: team.sales_location_id,
+          sales_location_name: salesLocation?.name ?? null,
+        }
+      : null
+
+    if (current) {
+      if (
+        teamContext &&
+        !current.team_contexts?.some(
+          (context) => context.team_id === teamContext.team_id,
+        )
+      ) {
+        current.team_contexts = [
+          ...(current.team_contexts ?? []),
+          teamContext,
+        ]
+      }
+      continue
+    }
+
+    const { profile: _profileRelation, ...memberFields } = member
+
+    membersById.set(member.id, {
+      ...memberFields,
+      profile,
+      team_contexts: teamContext ? [teamContext] : [],
+    })
+  }
+
+  return Array.from(membersById.values()).sort((a, b) => {
+    const aName = a.profile?.full_name ?? ''
+    const bName = b.profile?.full_name ?? ''
+    return aName.localeCompare(bName, 'pt-BR')
+  })
 }
 
 function InviteForm({
@@ -100,7 +192,14 @@ function InviteForm({
     selectedRole === ORG_ROLES.SALESPERSON ||
     selectedRole === ORG_ROLES.SUPERVISOR
 
-  const { data: teams, isLoading: teamsLoading } = useQuery({
+  const {
+    data: teams,
+    isLoading: teamsLoading,
+    isError: teamsIsError,
+    error: teamsError,
+    refetch: refetchTeams,
+    isFetching: teamsIsFetching,
+  } = useQuery({
     queryKey: ['invite-user-teams', orgId, isSupervisor, activeMembershipId],
     enabled:
       !!orgId &&
@@ -198,12 +297,17 @@ function InviteForm({
             const payload = await error.context?.json() as {
               error?: string
               message?: string
+              code?: string
             } | undefined
 
-            message =
+            const detail =
               payload?.error ??
               payload?.message ??
               message
+
+            message = payload?.code
+              ? `${detail} [${payload.code}]`
+              : detail
           } catch {
             // Mantém a mensagem original quando a resposta não é JSON.
           }
@@ -313,13 +417,28 @@ function InviteForm({
           </select>
           {errors.team_id && <p className="form-error">{errors.team_id.message}</p>}
 
-          {!teamsLoading && eligibleTeams.length === 0 && (
+          {teamsIsError ? (
+            <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+              <p>
+                Não foi possível carregar as equipes disponíveis: {' '}
+                {readableError(teamsError, 'erro desconhecido')}
+              </p>
+              <button
+                type="button"
+                className="mt-2 font-medium underline"
+                onClick={() => refetchTeams()}
+                disabled={teamsIsFetching}
+              >
+                {teamsIsFetching ? 'Tentando novamente...' : 'Tentar novamente'}
+              </button>
+            </div>
+          ) : !teamsLoading && eligibleTeams.length === 0 ? (
             <p className="mt-2 text-xs text-amber-700">
               {selectedRole === ORG_ROLES.SALESPERSON
                 ? 'Nenhuma equipe ativa com PDV e supervisor configurados está disponível para este cadastro.'
                 : 'Nenhuma equipe ativa com PDV e sem supervisor está disponível para vínculo imediato.'}
             </p>
-          )}
+          ) : null}
 
           {selectedTeam && (
             <div className="mt-2 rounded-md bg-gray-50 p-2 text-xs text-gray-600">
@@ -339,9 +458,25 @@ function InviteForm({
 
       <div className="flex gap-3 justify-end pt-2">
         <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-        <button type="submit" disabled={mutation.isPending} className="btn-primary">
+        <button
+          type="submit"
+          disabled={
+            mutation.isPending ||
+            teamsIsError ||
+            (
+              needsTeamContext &&
+              selectedRole === ORG_ROLES.SALESPERSON &&
+              eligibleTeams.length === 0
+            )
+          }
+          className="btn-primary"
+        >
           <Mail className="h-4 w-4" />
-          {mutation.isPending ? 'Enviando...' : 'Enviar convite'}
+          {mutation.isPending
+            ? 'Enviando...'
+            : isSupervisor
+              ? 'Cadastrar vendedor'
+              : 'Enviar convite'}
         </button>
       </div>
     </form>
@@ -365,18 +500,66 @@ export default function UsersPage() {
 
   const orgId = activeOrganization?.id
 
-  const { data: members, isLoading } = useQuery({
-    queryKey: ['org-members', orgId],
+  const {
+    data: members,
+    isLoading,
+    isError: membersIsError,
+    error: membersError,
+    refetch: refetchMembers,
+    isFetching: membersIsFetching,
+  } = useQuery({
+    queryKey: [
+      'org-members',
+      orgId,
+      isSupervisor ? 'supervisor' : 'management',
+      activeMembership?.id ?? profile?.id ?? null,
+    ],
     enabled: !!orgId,
     queryFn: async () => {
-      let q = supabase
+      if (!orgId) return []
+
+      if (isSupervisor) {
+        const { data, error } = await supabase
+          .from('team_members')
+          .select(`
+            organization_member_id,
+            organization_member:organization_members!team_members_member_org_fkey(
+              *,
+              profile:profiles!organization_members_user_id_fkey(
+                full_name,
+                email,
+                preferred_name,
+                last_access_at
+              )
+            ),
+            team:teams!team_members_team_org_fkey(
+              id,
+              name,
+              sales_location_id,
+              sales_location:sales_locations!teams_location_org_operation_fkey(name)
+            )
+          `)
+          .eq('organization_id', orgId)
+          .eq('status', 'active')
+          .eq('membership_type', 'salesperson')
+          .is('archived_at', null)
+          .order('created_at', { ascending: true })
+
+        if (error) throw error
+
+        return normalizeSupervisorMembers(
+          (data ?? []) as SupervisorTeamMemberRow[],
+        )
+      }
+
+      const { data, error } = await supabase
         .from('organization_members')
-        .select('*, profile:profiles!organization_members_user_id_fkey(full_name, email, preferred_name, last_access_at)')
+        .select(
+          '*, profile:profiles!organization_members_user_id_fkey(full_name, email, preferred_name, last_access_at)',
+        )
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
 
-      if (orgId) q = q.eq('organization_id', orgId)
-
-      const { data, error } = await q
       if (error) throw error
       return (data ?? []) as OrganizationMemberRow[]
     },
@@ -471,6 +654,25 @@ export default function UsersPage() {
 
         {isLoading ? (
           <div className="py-12 flex justify-center"><LoadingSpinner /></div>
+        ) : membersIsError ? (
+          <EmptyState
+            icon={UserCog}
+            title={isSupervisor ? 'Não foi possível carregar sua equipe' : 'Não foi possível carregar os usuários'}
+            description={readableError(
+              membersError,
+              'A consulta de usuários falhou. Tente novamente.',
+            )}
+            action={(
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => refetchMembers()}
+                disabled={membersIsFetching}
+              >
+                {membersIsFetching ? 'Carregando...' : 'Tentar novamente'}
+              </button>
+            )}
+          />
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={UserCog}
@@ -488,6 +690,9 @@ export default function UsersPage() {
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="table-th">Usuário</th>
                   <th className="table-th">Perfil</th>
+                  {isSupervisor && (
+                    <th className="table-th">Equipe / PDV</th>
+                  )}
                   <th className="table-th">Status</th>
                   <th className="table-th hidden md:table-cell">Último acesso</th>
                   <th className="table-th text-right">Ações</th>
@@ -513,6 +718,22 @@ export default function UsersPage() {
                         </div>
                       </td>
                       <td className="table-td"><RoleBadge role={m.role} /></td>
+                      {isSupervisor && (
+                        <td className="table-td">
+                          <div className="space-y-1">
+                            {(m.team_contexts ?? []).map((context) => (
+                              <div key={context.team_id}>
+                                <p className="text-sm font-medium text-gray-700">
+                                  {context.team_name}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {context.sales_location_name ?? 'PDV não definido'}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      )}
                       <td className="table-td"><StatusBadge status={m.status} /></td>
                       <td className="table-td hidden md:table-cell text-gray-500 text-xs">
                         {formatRelativeDate(p?.last_access_at)}
