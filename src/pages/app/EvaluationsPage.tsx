@@ -9,7 +9,6 @@ import {
   LockKeyhole,
   PlayCircle,
   RefreshCw,
-  ShieldCheck,
   UsersRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -451,8 +450,7 @@ export default function EvaluationsPage() {
     enabled:
       !!organizationId &&
       !!user?.id &&
-      !isAdmin &&
-      (isSupervisor || isDirector),
+      (isAdmin || isSupervisor || isDirector),
     queryFn: () => getManagedAssessmentProgress(organizationId!),
   })
 
@@ -476,25 +474,6 @@ export default function EvaluationsPage() {
       toast.error(message)
     },
   })
-
-  if (isAdmin) {
-    return (
-      <div className="page-container">
-        <PageHeader
-          title="Avaliações e certificações"
-          description="Diagnóstico técnico e progressão de certificação dos participantes."
-        />
-
-        <div className="card">
-          <EmptyState
-            icon={ShieldCheck}
-            title="Área destinada aos participantes"
-            description="O administrador da plataforma não inicia tentativas. A aplicação das avaliações exige um usuário com vínculo ativo na organização."
-          />
-        </div>
-      </div>
-    )
-  }
 
   if (isLoading) {
     return (
@@ -549,7 +528,7 @@ export default function EvaluationsPage() {
     (assessment) => assessment.last_attempt_passed === true,
   ).length
 
-  const hasManagementScope = isSupervisor || isDirector
+  const hasManagementScope = isAdmin || isSupervisor || isDirector
 
   const personalAssessments = !assessments.length ? (
     <div className="card">
@@ -625,7 +604,8 @@ export default function EvaluationsPage() {
 
       {hasManagementScope ? (
         <div className="space-y-8">
-          <section>
+          {!isAdmin && (
+            <section>
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 Minhas avaliações
@@ -635,7 +615,8 @@ export default function EvaluationsPage() {
               </p>
             </div>
             {personalAssessments}
-          </section>
+            </section>
+          )}
 
           <section>
             <div className="mb-4">
