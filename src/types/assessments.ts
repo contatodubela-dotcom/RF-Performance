@@ -23,6 +23,57 @@ export type AssessmentAttemptStatus =
 
 export type AssessmentOptionCode = 'A' | 'B' | 'C' | 'D'
 
+export type ManagedAssessmentProgressStatus =
+  | 'not_assigned'
+  | 'not_started'
+  | 'in_progress'
+  | 'submitted'
+  | 'passed'
+  | 'failed'
+  | 'expired'
+  | 'cancelled'
+
+export interface ManagedAssessmentTeamContext {
+  team_id: string
+  team_name: string
+  sales_location_id: string | null
+  sales_location_name: string | null
+}
+
+export interface ManagedAssessmentProgressRow {
+  organization_member_id: string
+  user_id: string
+  member_name: string
+  member_email: string
+  member_role: 'supervisor' | 'salesperson'
+  team_contexts: ManagedAssessmentTeamContext[]
+  test_id: string
+  test_code: string
+  sequence_no: number
+  test_title: string
+  test_purpose: AssessmentPurpose
+  test_version_id: string
+  version_code: string
+  assigned: boolean
+  attempts_used: number
+  in_progress_attempt_id: string | null
+  last_attempt_id: string | null
+  last_attempt_no: number | null
+  last_attempt_status: AssessmentAttemptStatus | null
+  last_attempt_started_at: string | null
+  last_attempt_submitted_at: string | null
+  last_attempt_graded_at: string | null
+  last_attempt_overall_score: number | null
+  last_attempt_legal_score: number | null
+  last_attempt_passed: boolean | null
+  last_graded_attempt_id: string | null
+  last_graded_attempt_no: number | null
+  last_graded_overall_score: number | null
+  last_graded_legal_score: number | null
+  last_graded_passed: boolean | null
+  progress_status: ManagedAssessmentProgressStatus
+}
+
 export type AssessmentResultReason =
   | 'critical_error'
   | 'overall_score_below_minimum'

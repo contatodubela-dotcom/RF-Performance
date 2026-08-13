@@ -4,6 +4,7 @@ import type {
   AssessmentAttemptResult,
   AssessmentOptionCode,
   AvailableAssessmentsResponse,
+  ManagedAssessmentProgressRow,
   SaveAssessmentAnswerResponse,
   SubmitAssessmentAttemptResponse,
 } from '@/types/assessments'
@@ -26,6 +27,8 @@ export type AssessmentErrorCode =
   | 'ALL_QUESTIONS_MUST_BE_ANSWERED'
   | 'ASSESSMENT_KEY_INTEGRITY_ERROR'
   | 'INVALID_OPTION_CODE'
+  | 'ORGANIZATION_NOT_AVAILABLE'
+  | 'ASSESSMENT_MANAGEMENT_FORBIDDEN'
   | 'ASSESSMENT_RPC_ERROR'
 
 const ERROR_MESSAGES: Record<AssessmentErrorCode, string> = {
@@ -55,6 +58,10 @@ const ERROR_MESSAGES: Record<AssessmentErrorCode, string> = {
   ASSESSMENT_KEY_INTEGRITY_ERROR:
     'A correção foi interrompida por uma inconsistência de segurança.',
   INVALID_OPTION_CODE: 'Selecione uma alternativa válida.',
+  ORGANIZATION_NOT_AVAILABLE:
+    'A organização selecionada não está disponível para esta consulta.',
+  ASSESSMENT_MANAGEMENT_FORBIDDEN:
+    'Seu perfil não possui permissão para acompanhar avaliações da equipe.',
   ASSESSMENT_RPC_ERROR:
     'Não foi possível concluir a operação de avaliação. Tente novamente.',
 }
@@ -191,4 +198,15 @@ export async function getAssessmentAttemptResult(
     data,
     'get_assessment_attempt_result',
   )
+}
+
+export async function getManagedAssessmentProgress(
+  organizationId: string,
+): Promise<ManagedAssessmentProgressRow[]> {
+  const { data, error } = await supabase.rpc('get_managed_assessment_progress', {
+    p_organization_id: organizationId,
+  })
+
+  if (error) throw mapRpcError(error)
+  return (data ?? []) as ManagedAssessmentProgressRow[]
 }

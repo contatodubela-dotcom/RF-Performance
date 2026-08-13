@@ -10,6 +10,7 @@ import {
   PlayCircle,
   RefreshCw,
   ShieldCheck,
+  UsersRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
@@ -17,11 +18,14 @@ import { ROUTES } from '@/constants/routes'
 import {
   AssessmentServiceError,
   getAvailableAssessments,
+  getManagedAssessmentProgress,
   startAssessmentAttempt,
 } from '@/services/assessmentService'
 import type {
   AssessmentAvailability,
   AvailableAssessment,
+  ManagedAssessmentProgressRow,
+  ManagedAssessmentProgressStatus,
 } from '@/types/assessments'
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -62,6 +66,223 @@ function formatNextAttempt(value: string | null) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+const MANAGED_PROGRESS_LABELS: Record<ManagedAssessmentProgressStatus, string> = {
+  not_assigned: 'Não atribuída',
+  not_started: 'Não iniciada',
+  in_progress: 'Em andamento',
+  submitted: 'Enviada',
+  passed: 'Aprovado',
+  failed: 'Reprovado',
+  expired: 'Expirada',
+  cancelled: 'Cancelada',
+}
+
+const MANAGED_PROGRESS_CLASSES: Record<ManagedAssessmentProgressStatus, string> = {
+  not_assigned: 'bg-gray-100 text-gray-700',
+  not_started: 'bg-slate-100 text-slate-700',
+  in_progress: 'bg-blue-100 text-blue-800',
+  submitted: 'bg-indigo-100 text-indigo-800',
+  passed: 'bg-green-100 text-green-800',
+  failed: 'bg-red-100 text-red-800',
+  expired: 'bg-amber-100 text-amber-800',
+  cancelled: 'bg-gray-100 text-gray-600',
+}
+
+function formatManagedScore(value: number | null) {
+  if (value === null) return '—'
+  return `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
+}
+
+function formatManagedDate(value: string | null) {
+  if (!value) return '—'
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function ManagedAssessmentsPanel({
+  rows,
+  isLoading,
+  isFetching,
+  error,
+  onRetry,
+  scopeLabel,
+}: {
+  rows: ManagedAssessmentProgressRow[]
+  isLoading: boolean
+  isFetching: boolean
+  error: unknown
+  onRetry: () => void
+  scopeLabel: string
+}) {
+  if (isLoading) {
+    return (
+      <div className="card flex min-h-[220px] items-center justify-center">
+        <LoadingSpinner message="Carregando avaliações da equipe..." />
+      </div>
+    )
+  }
+
+  if (error) {
+    const message =
+      error instanceof AssessmentServiceError
+        ? error.message
+        : 'Não foi possível carregar o acompanhamento das avaliações.'
+
+    return (
+      <div className="card">
+        <EmptyState
+          icon={UsersRound}
+          title="Falha ao carregar avaliações da equipe"
+          description={message}
+          action={(
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={onRetry}
+              disabled={isFetching}
+            >
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`}
+              />
+              Tentar novamente
+            </button>
+          )}
+        />
+      </div>
+    )
+  }
+
+  if (!rows.length) {
+    return (
+      <div className="card">
+        <EmptyState
+          icon={UsersRound}
+          title="Nenhum participante no escopo"
+          description={`Não há participantes com avaliações publicadas em ${scopeLabel}.`}
+        />
+      </div>
+    )
+  }
+
+  const members = Array.from(
+    rows.reduce((groups, row) => {
+      const current = groups.get(row.organization_member_id) ?? []
+      current.push(row)
+      groups.set(row.organization_member_id, current)
+      return groups
+    }, new Map<string, ManagedAssessmentProgressRow[]>()),
+  )
+
+  return (
+    <div className="space-y-4">
+      {members.map(([memberId, memberRows]) => {
+        const member = memberRows[0]
+        const teams = member.team_contexts ?? []
+        const assignedCount = memberRows.filter((row) => row.assigned).length
+        const passedCount = memberRows.filter(
+          (row) => row.progress_status === 'passed',
+        ).length
+
+        return (
+          <section key={memberId} className="card overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 p-4">
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  {member.member_name}
+                </h3>
+                <p className="text-xs text-gray-500">{member.member_email}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {teams.length ? (
+                    teams.map((team) => (
+                      <span
+                        key={team.team_id}
+                        className="badge bg-gray-100 text-gray-700"
+                      >
+                        {team.team_name}
+                        {team.sales_location_name
+                          ? ` · ${team.sales_location_name}`
+                          : ''}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-amber-700">
+                      Sem equipe ativa no escopo
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="text-right text-xs text-gray-500">
+                <p>{assignedCount} atribuída(s)</p>
+                <p>{passedCount} concluída(s) com aprovação</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="table-th">Avaliação</th>
+                    <th className="table-th">Status</th>
+                    <th className="table-th">Tentativas</th>
+                    <th className="table-th">Última nota</th>
+                    <th className="table-th hidden lg:table-cell">Última atividade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {memberRows
+                    .slice()
+                    .sort((a, b) => a.sequence_no - b.sequence_no)
+                    .map((row) => (
+                      <tr
+                        key={`${row.organization_member_id}:${row.test_version_id}`}
+                        className="border-b border-gray-100 last:border-b-0"
+                      >
+                        <td className="table-td">
+                          <p className="font-medium text-gray-800">
+                            {row.sequence_no}. {row.test_title}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {row.test_purpose === 'diagnostic'
+                              ? 'Diagnóstico'
+                              : 'Certificação'}
+                          </p>
+                        </td>
+                        <td className="table-td">
+                          <span
+                            className={`badge ${MANAGED_PROGRESS_CLASSES[row.progress_status]}`}
+                          >
+                            {MANAGED_PROGRESS_LABELS[row.progress_status]}
+                          </span>
+                        </td>
+                        <td className="table-td text-gray-600">
+                          {row.attempts_used}
+                        </td>
+                        <td className="table-td text-gray-600">
+                          {formatManagedScore(row.last_graded_overall_score)}
+                        </td>
+                        <td className="table-td hidden text-xs text-gray-500 lg:table-cell">
+                          {formatManagedDate(
+                            row.last_attempt_graded_at ??
+                              row.last_attempt_submitted_at ??
+                              row.last_attempt_started_at,
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )
+      })}
+    </div>
+  )
 }
 
 function AssessmentCard({
@@ -203,7 +424,7 @@ function AssessmentCard({
 }
 
 export default function EvaluationsPage() {
-  const { activeOrganization, user, isAdmin } = useAuth()
+  const { activeOrganization, user, isAdmin, isDirector, isSupervisor } = useAuth()
   const organizationId = activeOrganization?.id
   const navigate = useNavigate()
 
@@ -217,6 +438,22 @@ export default function EvaluationsPage() {
     queryKey: ['available-assessments', organizationId, user?.id],
     enabled: !!organizationId && !!user?.id && !isAdmin,
     queryFn: () => getAvailableAssessments(organizationId!),
+  })
+
+  const {
+    data: managedRows = [],
+    error: managedError,
+    isLoading: managedIsLoading,
+    isFetching: managedIsFetching,
+    refetch: refetchManaged,
+  } = useQuery({
+    queryKey: ['managed-assessment-progress', organizationId, user?.id],
+    enabled:
+      !!organizationId &&
+      !!user?.id &&
+      !isAdmin &&
+      (isSupervisor || isDirector),
+    queryFn: () => getManagedAssessmentProgress(organizationId!),
   })
 
   const startMutation = useMutation({
@@ -312,6 +549,73 @@ export default function EvaluationsPage() {
     (assessment) => assessment.last_attempt_passed === true,
   ).length
 
+  const hasManagementScope = isSupervisor || isDirector
+
+  const personalAssessments = !assessments.length ? (
+    <div className="card">
+      <EmptyState
+        icon={ClipboardCheck}
+        title={
+          hasManagementScope
+            ? 'Nenhuma avaliação atribuída a você'
+            : 'Nenhuma avaliação disponível'
+        }
+        description={
+          hasManagementScope
+            ? 'Suas avaliações aparecerão aqui quando forem atribuídas ao seu usuário.'
+            : 'As avaliações aparecerão aqui quando forem publicadas para a sua organização.'
+        }
+      />
+    </div>
+  ) : (
+    <>
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <div className="card p-4">
+          <ClipboardCheck className="mb-2 h-5 w-5 text-brand-700" />
+          <p className="text-2xl font-bold text-gray-900">
+            {assessments.length}
+          </p>
+          <p className="text-sm text-gray-500">avaliações atribuídas</p>
+        </div>
+
+        <div className="card p-4">
+          <CheckCircle2 className="mb-2 h-5 w-5 text-green-600" />
+          <p className="text-2xl font-bold text-gray-900">
+            {completedCount}
+          </p>
+          <p className="text-sm text-gray-500">etapas aprovadas</p>
+        </div>
+
+        <div className="card p-4">
+          <Award className="mb-2 h-5 w-5 text-amber-600" />
+          <p className="text-2xl font-bold text-gray-900">
+            {availableCount}
+          </p>
+          <p className="text-sm text-gray-500">disponíveis agora</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {assessments.map((assessment) => (
+          <AssessmentCard
+            key={assessment.test_id}
+            assessment={assessment}
+            isStarting={
+              startMutation.isPending &&
+              startMutation.variables?.test_id === assessment.test_id
+            }
+            onStart={(selectedAssessment) =>
+              startMutation.mutate(selectedAssessment)
+            }
+            onViewResult={(attemptId) =>
+              navigate(`${ROUTES.EVALUATIONS}/${attemptId}/resultado`)
+            }
+          />
+        ))}
+      </div>
+    </>
+  )
+
   return (
     <div className="page-container">
       <PageHeader
@@ -319,63 +623,49 @@ export default function EvaluationsPage() {
         description="Diagnóstico técnico e progressão de certificação dos participantes."
       />
 
-      {!assessments.length ? (
-        <div className="card">
-          <EmptyState
-            icon={ClipboardCheck}
-            title="Nenhuma avaliação disponível"
-            description="As avaliações aparecerão aqui quando forem publicadas para a sua organização."
-          />
+      {hasManagementScope ? (
+        <div className="space-y-8">
+          <section>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Minhas avaliações
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Avaliações atribuídas diretamente ao seu usuário.
+              </p>
+            </div>
+            {personalAssessments}
+          </section>
+
+          <section>
+            <div className="mb-4">
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                <UsersRound className="h-5 w-5 text-brand-700" />
+                {isSupervisor
+                  ? 'Avaliações da minha equipe'
+                  : 'Avaliações da organização'}
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {isSupervisor
+                  ? 'Acompanhe somente os vendedores das equipes sob sua responsabilidade.'
+                  : 'Acompanhe supervisores e vendedores ativos da organização.'}
+              </p>
+            </div>
+
+            <ManagedAssessmentsPanel
+              rows={managedRows}
+              isLoading={managedIsLoading}
+              isFetching={managedIsFetching}
+              error={managedError}
+              onRetry={() => refetchManaged()}
+              scopeLabel={
+                isSupervisor ? 'suas equipes' : 'esta organização'
+              }
+            />
+          </section>
         </div>
       ) : (
-        <>
-          <div className="mb-6 grid gap-4 sm:grid-cols-3">
-            <div className="card p-4">
-              <ClipboardCheck className="mb-2 h-5 w-5 text-brand-700" />
-              <p className="text-2xl font-bold text-gray-900">
-                {assessments.length}
-              </p>
-              <p className="text-sm text-gray-500">avaliações publicadas</p>
-            </div>
-
-            <div className="card p-4">
-              <CheckCircle2 className="mb-2 h-5 w-5 text-green-600" />
-              <p className="text-2xl font-bold text-gray-900">
-                {completedCount}
-              </p>
-              <p className="text-sm text-gray-500">etapas aprovadas</p>
-            </div>
-
-            <div className="card p-4">
-              <Award className="mb-2 h-5 w-5 text-amber-600" />
-              <p className="text-2xl font-bold text-gray-900">
-                {availableCount}
-              </p>
-              <p className="text-sm text-gray-500">disponíveis agora</p>
-            </div>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            {assessments.map((assessment) => (
-              <AssessmentCard
-                key={assessment.test_id}
-                assessment={assessment}
-                isStarting={
-                  startMutation.isPending &&
-                  startMutation.variables?.test_id === assessment.test_id
-                }
-                onStart={(selectedAssessment) =>
-                  startMutation.mutate(selectedAssessment)
-                }
-                onViewResult={(attemptId) =>
-                  navigate(
-                    `${ROUTES.EVALUATIONS}/${attemptId}/resultado`,
-                  )
-                }
-              />
-            ))}
-          </div>
-        </>
+        personalAssessments
       )}
     </div>
   )
