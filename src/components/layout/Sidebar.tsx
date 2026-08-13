@@ -91,7 +91,6 @@ const NAV: NavSection[] = [
         label: 'Avaliações',
         path: ROUTES.EVALUATIONS,
         icon: ClipboardCheck,
-        pending: true,
       },
       {
         label: 'Feedbacks',
