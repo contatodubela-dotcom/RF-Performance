@@ -1,9 +1,12 @@
 import { supabase } from '@/lib/supabase'
 import type {
+  AssessmentAccessAdminState,
   AssessmentAttempt,
   AssessmentAttemptResult,
   AssessmentOptionCode,
   AvailableAssessmentsResponse,
+  ConfigureAssessmentAccessInput,
+  ConfigureAssessmentAccessResponse,
   ManagedAssessmentProgressRow,
   SaveAssessmentAnswerResponse,
   SubmitAssessmentAttemptResponse,
@@ -29,6 +32,11 @@ export type AssessmentErrorCode =
   | 'INVALID_OPTION_CODE'
   | 'ORGANIZATION_NOT_AVAILABLE'
   | 'ASSESSMENT_MANAGEMENT_FORBIDDEN'
+  | 'ASSESSMENT_ACCESS_MANAGEMENT_FORBIDDEN'
+  | 'ASSESSMENT_ACCESS_SCOPE_INVALID'
+  | 'ASSESSMENT_MEMBER_REQUIRED'
+  | 'ASSESSMENT_MEMBER_NOT_ALLOWED_FOR_ORGANIZATION_SCOPE'
+  | 'ASSESSMENT_PARTICIPANT_NOT_ELIGIBLE'
   | 'ASSESSMENT_RPC_ERROR'
 
 const ERROR_MESSAGES: Record<AssessmentErrorCode, string> = {
@@ -62,6 +70,16 @@ const ERROR_MESSAGES: Record<AssessmentErrorCode, string> = {
     'A organização selecionada não está disponível para esta consulta.',
   ASSESSMENT_MANAGEMENT_FORBIDDEN:
     'Seu perfil não possui permissão para acompanhar avaliações da equipe.',
+  ASSESSMENT_ACCESS_MANAGEMENT_FORBIDDEN:
+    'Seu perfil não possui permissão para liberar ou revogar avaliações.',
+  ASSESSMENT_ACCESS_SCOPE_INVALID:
+    'O tipo de liberação informado não é válido.',
+  ASSESSMENT_MEMBER_REQUIRED:
+    'Selecione um participante para a liberação individual.',
+  ASSESSMENT_MEMBER_NOT_ALLOWED_FOR_ORGANIZATION_SCOPE:
+    'A liberação para a organização não pode indicar um participante específico.',
+  ASSESSMENT_PARTICIPANT_NOT_ELIGIBLE:
+    'O usuário selecionado não está elegível para participar das avaliações.',
   ASSESSMENT_RPC_ERROR:
     'Não foi possível concluir a operação de avaliação. Tente novamente.',
 }
@@ -209,4 +227,45 @@ export async function getManagedAssessmentProgress(
 
   if (error) throw mapRpcError(error)
   return (data ?? []) as ManagedAssessmentProgressRow[]
+}
+
+export async function getAssessmentAccessAdminState(
+  organizationId: string,
+): Promise<AssessmentAccessAdminState> {
+  const { data, error } = await supabase.rpc(
+    'get_assessment_access_admin_state',
+    {
+      p_organization_id: organizationId,
+    },
+  )
+
+  if (error) throw mapRpcError(error)
+  return requireRpcData<AssessmentAccessAdminState>(
+    data,
+    'get_assessment_access_admin_state',
+  )
+}
+
+export async function configureAssessmentAccess({
+  organizationId,
+  testId,
+  accessScope,
+  organizationMemberId,
+  enabled,
+  reason = null,
+}: ConfigureAssessmentAccessInput): Promise<ConfigureAssessmentAccessResponse> {
+  const { data, error } = await supabase.rpc('configure_assessment_access', {
+    p_organization_id: organizationId,
+    p_test_id: testId,
+    p_access_scope: accessScope,
+    p_organization_member_id: organizationMemberId,
+    p_enabled: enabled,
+    p_reason: reason,
+  })
+
+  if (error) throw mapRpcError(error)
+  return requireRpcData<ConfigureAssessmentAccessResponse>(
+    data,
+    'configure_assessment_access',
+  )
 }

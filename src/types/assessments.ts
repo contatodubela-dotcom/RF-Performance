@@ -45,7 +45,7 @@ export interface ManagedAssessmentProgressRow {
   user_id: string
   member_name: string
   member_email: string
-  member_role: 'supervisor' | 'salesperson'
+  member_role: 'director' | 'supervisor' | 'salesperson'
   team_contexts: ManagedAssessmentTeamContext[]
   test_id: string
   test_code: string
@@ -232,4 +232,60 @@ export function isAssessmentAttemptExpired(
   value: SaveAssessmentAnswerResponse | SubmitAssessmentAttemptResponse,
 ): value is AssessmentAttemptExpired {
   return 'status' in value && value.status === 'expired'
+}
+
+export type AssessmentAccessScope = 'member' | 'organization'
+
+export type AssessmentParticipantRole =
+  | 'salesperson'
+  | 'supervisor'
+  | 'director'
+
+export interface AssessmentAccessAdminTest {
+  test_id: string
+  test_version_id: string
+  sequence_no: number
+  title: string
+  version_code: string
+}
+
+export interface AssessmentAccessAdminMember {
+  organization_member_id: string
+  user_id: string
+  name: string
+  email: string
+  role: AssessmentParticipantRole
+}
+
+export interface AssessmentAccessGrant {
+  grant_id: string
+  test_id: string
+  test_version_id: string
+  access_scope: AssessmentAccessScope
+  organization_member_id: string | null
+  valid_from: string | null
+  valid_until: string | null
+  reason: string
+}
+
+export interface AssessmentAccessAdminState {
+  organization_id: string
+  tests: AssessmentAccessAdminTest[]
+  members: AssessmentAccessAdminMember[]
+  active_grants: AssessmentAccessGrant[]
+}
+
+export interface ConfigureAssessmentAccessInput {
+  organizationId: string
+  testId: string
+  accessScope: AssessmentAccessScope
+  organizationMemberId: string | null
+  enabled: boolean
+  reason?: string | null
+}
+
+export interface ConfigureAssessmentAccessResponse {
+  enabled: boolean
+  grant_id?: string
+  affected: number
 }
