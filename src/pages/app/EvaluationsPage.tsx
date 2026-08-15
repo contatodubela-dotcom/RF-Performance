@@ -29,6 +29,7 @@ import type {
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import PageHeader from '@/components/shared/PageHeader'
+import AssessmentAccessAdminPanel from '@/components/assessments/AssessmentAccessAdminPanel'
 
 const AVAILABILITY_LABELS: Record<AssessmentAvailability, string> = {
   available: 'Disponível',
@@ -604,6 +605,8 @@ export default function EvaluationsPage() {
 
       {hasManagementScope ? (
         <div className="space-y-8">
+          {isAdmin && <AssessmentAccessAdminPanel />}
+
           {!isAdmin && (
             <section>
             <div className="mb-4">
@@ -629,6 +632,8 @@ export default function EvaluationsPage() {
               <p className="mt-1 text-sm text-gray-500">
                 {isSupervisor
                   ? 'Acompanhe somente os vendedores das equipes sob sua responsabilidade.'
+                  : isAdmin
+                  ? 'Acompanhe diretores, supervisores e vendedores ativos da organização.'
                   : 'Acompanhe supervisores e vendedores ativos da organização.'}
               </p>
             </div>
