@@ -148,8 +148,8 @@ function ResultBanner({ result }: { result: AssessmentAttemptResult }) {
             {diagnostic
               ? 'Diagnóstico concluído'
               : result.passed
-                ? 'Certificação aprovada'
-                : 'Certificação não aprovada'}
+                ? 'Avaliação aprovada'
+                : 'Avaliação não aprovada'}
           </h2>
           <p
             className={`mt-1 text-sm ${
