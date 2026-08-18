@@ -20,6 +20,10 @@ import {
   getManagedAssessmentProgress,
   startAssessmentAttempt,
 } from '@/services/assessmentService'
+import {
+  getManagedCertifications,
+  getMyCertifications,
+} from '@/services/certificationService'
 import type {
   AssessmentAvailability,
   AvailableAssessment,
@@ -30,6 +34,7 @@ import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import PageHeader from '@/components/shared/PageHeader'
 import AssessmentAccessAdminPanel from '@/components/assessments/AssessmentAccessAdminPanel'
+import PersonalCertificationsPanel from '@/components/certifications/PersonalCertificationsPanel'
 
 const AVAILABILITY_LABELS: Record<AssessmentAvailability, string> = {
   available: 'Disponível',
@@ -455,6 +460,32 @@ export default function EvaluationsPage() {
     queryFn: () => getManagedAssessmentProgress(organizationId!),
   })
 
+  const {
+    data: myCertifications = [],
+    error: myCertificationsError,
+    isLoading: myCertificationsIsLoading,
+    isFetching: myCertificationsIsFetching,
+    refetch: refetchMyCertifications,
+  } = useQuery({
+    queryKey: ['my-certifications', organizationId, user?.id],
+    enabled: !!organizationId && !!user?.id && !isAdmin,
+    queryFn: () => getMyCertifications(organizationId!),
+  })
+
+  const {
+    data: managedCertifications = [],
+    error: managedCertificationsError,
+    isLoading: managedCertificationsIsLoading,
+    isFetching: managedCertificationsIsFetching,
+    refetch: refetchManagedCertifications,
+  } = useQuery({
+    queryKey: ['managed-certifications', organizationId, user?.id],
+    enabled:
+      !!organizationId &&
+      !!user?.id &&
+      (isAdmin || isSupervisor || isDirector),
+    queryFn: () => getManagedCertifications(organizationId!),
+  })
   const startMutation = useMutation({
     mutationFn: (assessment: AvailableAssessment) => {
       if (!organizationId) {
@@ -596,6 +627,15 @@ export default function EvaluationsPage() {
     </>
   )
 
+  const personalCertifications = (
+    <PersonalCertificationsPanel
+      rows={myCertifications}
+      isLoading={myCertificationsIsLoading}
+      isFetching={myCertificationsIsFetching}
+      error={myCertificationsError}
+      onRetry={() => refetchMyCertifications()}
+    />
+  )
   return (
     <div className="page-container">
       <PageHeader
@@ -621,6 +661,19 @@ export default function EvaluationsPage() {
             </section>
           )}
 
+          {!isAdmin && (
+            <section>
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Minhas certificações
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Certificações efetivamente emitidas para o seu usuário.
+                </p>
+              </div>
+              {personalCertifications}
+            </section>
+          )}
           <section>
             <div className="mb-4">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
@@ -651,7 +704,31 @@ export default function EvaluationsPage() {
           </section>
         </div>
       ) : (
-        personalAssessments
+        <div className="space-y-8">
+          <section>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Minhas avaliações
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Avaliações atribuídas diretamente ao seu usuário.
+              </p>
+            </div>
+            {personalAssessments}
+          </section>
+
+          <section>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Minhas certificações
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Certificações efetivamente emitidas para o seu usuário.
+              </p>
+            </div>
+            {personalCertifications}
+          </section>
+        </div>
       )}
     </div>
   )
