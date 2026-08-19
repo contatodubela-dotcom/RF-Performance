@@ -256,7 +256,7 @@ function ManagedAssessmentsPanel({
                           <p className="text-xs text-gray-500">
                             {row.test_purpose === 'diagnostic'
                               ? 'Diagnóstico'
-                              : 'Certificação'}
+                              : 'Avaliação de certificação'}
                           </p>
                         </td>
                         <td className="table-td">
@@ -327,7 +327,7 @@ function AssessmentCard({
             <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
               {assessment.purpose === 'diagnostic'
                 ? 'Diagnóstico'
-                : 'Certificação'}
+                : 'Avaliação de certificação'}
             </p>
             <h2 className="mt-1 font-semibold text-gray-900">
               {assessment.title}
