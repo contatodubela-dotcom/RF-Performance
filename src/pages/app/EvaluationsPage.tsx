@@ -34,6 +34,7 @@ import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import PageHeader from '@/components/shared/PageHeader'
 import AssessmentAccessAdminPanel from '@/components/assessments/AssessmentAccessAdminPanel'
+import ManagedCertificationsPanel from '@/components/certifications/ManagedCertificationsPanel'
 import PersonalCertificationsPanel from '@/components/certifications/PersonalCertificationsPanel'
 
 const AVAILABILITY_LABELS: Record<AssessmentAvailability, string> = {
@@ -697,6 +698,35 @@ export default function EvaluationsPage() {
               isFetching={managedIsFetching}
               error={managedError}
               onRetry={() => refetchManaged()}
+              scopeLabel={
+                isSupervisor ? 'suas equipes' : 'esta organização'
+              }
+            />
+          </section>
+
+          <section>
+            <div className="mb-4">
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                <Award className="h-5 w-5 text-brand-700" />
+                {isSupervisor
+                  ? 'Certificações da minha equipe'
+                  : 'Certificações da organização'}
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {isSupervisor
+                  ? 'Consulte as certificações efetivamente emitidas para os vendedores das equipes sob sua responsabilidade.'
+                  : isAdmin
+                  ? 'Consulte as certificações efetivamente emitidas para diretores, supervisores e vendedores ativos da organização.'
+                  : 'Consulte as certificações efetivamente emitidas para supervisores e vendedores ativos da organização.'}
+              </p>
+            </div>
+
+            <ManagedCertificationsPanel
+              rows={managedCertifications}
+              isLoading={managedCertificationsIsLoading}
+              isFetching={managedCertificationsIsFetching}
+              error={managedCertificationsError}
+              onRetry={() => refetchManagedCertifications()}
               scopeLabel={
                 isSupervisor ? 'suas equipes' : 'esta organização'
               }
