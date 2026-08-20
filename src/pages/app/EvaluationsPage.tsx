@@ -34,6 +34,8 @@ import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import PageHeader from '@/components/shared/PageHeader'
 import AssessmentAccessAdminPanel from '@/components/assessments/AssessmentAccessAdminPanel'
+import PracticalAssessmentManagementPanel from '@/components/assessments/PracticalAssessmentManagementPanel'
+import CertificationIssuanceAdminPanel from '@/components/certifications/CertificationIssuanceAdminPanel'
 import ManagedCertificationsPanel from '@/components/certifications/ManagedCertificationsPanel'
 import PersonalCertificationsPanel from '@/components/certifications/PersonalCertificationsPanel'
 
@@ -648,6 +650,25 @@ export default function EvaluationsPage() {
         <div className="space-y-8">
           {isAdmin && <AssessmentAccessAdminPanel />}
 
+          {isAdmin && organizationId && (
+            <section>
+              <div className="mb-4">
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Award className="h-5 w-5 text-brand-700" />
+                  Emissão de certificações
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Consulte a elegibilidade calculada pelo motor de certificação e emita somente quando todos os requisitos estiverem atendidos.
+                </p>
+              </div>
+
+              <CertificationIssuanceAdminPanel
+                organizationId={organizationId}
+                rows={managedRows}
+              />
+            </section>
+          )}
+
           {!isAdmin && (
             <section>
             <div className="mb-4">
@@ -703,6 +724,26 @@ export default function EvaluationsPage() {
               }
             />
           </section>
+
+          {!isAdmin && (isSupervisor || isDirector) && organizationId && (
+            <section>
+              <div className="mb-4">
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <ClipboardCheck className="h-5 w-5 text-brand-700" />
+                  Avaliações práticas
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Registre resultados práticos dos participantes do seu escopo.
+                  A aprovação é calculada pelo servidor conforme o requisito do programa de certificação.
+                </p>
+              </div>
+
+              <PracticalAssessmentManagementPanel
+                organizationId={organizationId}
+                rows={managedRows}
+              />
+            </section>
+          )}
 
           <section>
             <div className="mb-4">
