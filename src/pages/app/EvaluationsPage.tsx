@@ -35,6 +35,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import PageHeader from '@/components/shared/PageHeader'
 import AssessmentAccessAdminPanel from '@/components/assessments/AssessmentAccessAdminPanel'
 import PracticalAssessmentManagementPanel from '@/components/assessments/PracticalAssessmentManagementPanel'
+import CertificationIssuanceAdminPanel from '@/components/certifications/CertificationIssuanceAdminPanel'
 import ManagedCertificationsPanel from '@/components/certifications/ManagedCertificationsPanel'
 import PersonalCertificationsPanel from '@/components/certifications/PersonalCertificationsPanel'
 
@@ -648,6 +649,25 @@ export default function EvaluationsPage() {
       {hasManagementScope ? (
         <div className="space-y-8">
           {isAdmin && <AssessmentAccessAdminPanel />}
+
+          {isAdmin && organizationId && (
+            <section>
+              <div className="mb-4">
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Award className="h-5 w-5 text-brand-700" />
+                  Emissão de certificações
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Consulte a elegibilidade calculada pelo motor de certificação e emita somente quando todos os requisitos estiverem atendidos.
+                </p>
+              </div>
+
+              <CertificationIssuanceAdminPanel
+                organizationId={organizationId}
+                rows={managedRows}
+              />
+            </section>
+          )}
 
           {!isAdmin && (
             <section>
