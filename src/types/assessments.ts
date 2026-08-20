@@ -74,6 +74,67 @@ export interface ManagedAssessmentProgressRow {
   progress_status: ManagedAssessmentProgressStatus
 }
 
+
+export type PracticalAssessmentType =
+  | 'role_play'
+  | 'full_simulation'
+  | 'case_presentation'
+  | 'microtraining'
+
+export interface ManagedPracticalAssessmentRequirement {
+  certification_requirement_id: string
+  certification_program_id: string
+  certification_program_version_id: string
+  program_code: string
+  program_name: string
+  program_status: string
+  version_code: string
+  version_no: number
+  version_name: string
+  version_status: string
+  requirement_sequence_no: number
+  requirement_title: string
+  requirement_description: string | null
+  assessment_type: PracticalAssessmentType | null
+  minimum_score: number | null
+  max_critical_errors: number | null
+  latest_practical_assessment_id: string | null
+  latest_status: string | null
+  latest_score: number | null
+  latest_critical_errors: number | null
+  latest_passed: boolean | null
+  latest_assessed_at: string | null
+  latest_evaluator_member_id: string | null
+  latest_evaluator_name: string | null
+}
+
+export interface RecordPracticalAssessmentInput {
+  organizationId: string
+  organizationMemberId: string
+  certificationRequirementId: string
+  score: number
+  criticalErrors?: number
+  criteriaScores?: Record<string, unknown>
+  notes?: string | null
+  evidence?: unknown[]
+}
+
+export interface RecordPracticalAssessmentResponse {
+  practical_assessment_id: string
+  organization_id: string
+  organization_member_id: string
+  evaluator_member_id: string
+  certification_program_id: string
+  certification_program_version_id: string
+  certification_requirement_id: string
+  assessment_type: PracticalAssessmentType
+  status: 'completed'
+  score: number
+  critical_errors: number
+  passed: boolean
+  assessed_at: string
+}
+
 export type AssessmentResultReason =
   | 'critical_error'
   | 'overall_score_below_minimum'

@@ -8,6 +8,9 @@ import type {
   ConfigureAssessmentAccessInput,
   ConfigureAssessmentAccessResponse,
   ManagedAssessmentProgressRow,
+  ManagedPracticalAssessmentRequirement,
+  RecordPracticalAssessmentInput,
+  RecordPracticalAssessmentResponse,
   SaveAssessmentAnswerResponse,
   SubmitAssessmentAttemptResponse,
 } from '@/types/assessments'
@@ -37,6 +40,24 @@ export type AssessmentErrorCode =
   | 'ASSESSMENT_MEMBER_REQUIRED'
   | 'ASSESSMENT_MEMBER_NOT_ALLOWED_FOR_ORGANIZATION_SCOPE'
   | 'ASSESSMENT_PARTICIPANT_NOT_ELIGIBLE'
+  | 'PRACTICAL_ASSESSMENT_ORGANIZATION_REQUIRED'
+  | 'PRACTICAL_ASSESSMENT_MEMBER_REQUIRED'
+  | 'PRACTICAL_ASSESSMENT_MANAGEMENT_FORBIDDEN'
+  | 'PRACTICAL_ASSESSMENT_SCORE_INVALID'
+  | 'PRACTICAL_ASSESSMENT_CRITICAL_ERRORS_INVALID'
+  | 'PRACTICAL_ASSESSMENT_CRITERIA_INVALID'
+  | 'PRACTICAL_ASSESSMENT_EVIDENCE_INVALID'
+  | 'PRACTICAL_ASSESSMENT_NOTES_TOO_LONG'
+  | 'PRACTICAL_ASSESSMENT_PLATFORM_ADMIN_CANNOT_EVALUATE'
+  | 'PRACTICAL_ASSESSMENT_EVALUATOR_ROLE_REQUIRED'
+  | 'PRACTICAL_ASSESSMENT_TARGET_FORBIDDEN'
+  | 'PRACTICAL_ASSESSMENT_TARGET_NOT_ELIGIBLE'
+  | 'PRACTICAL_ASSESSMENT_TARGET_NOT_AVAILABLE'
+  | 'PRACTICAL_ASSESSMENT_REQUIREMENT_REQUIRED'
+  | 'PRACTICAL_ASSESSMENT_REQUIREMENT_NOT_AVAILABLE'
+  | 'PRACTICAL_ASSESSMENT_PROGRAM_VERSION_NOT_AVAILABLE'
+  | 'PRACTICAL_ASSESSMENT_TYPE_NOT_CONFIGURED'
+  | 'PRACTICAL_ASSESSMENT_TYPE_UNSUPPORTED'
   | 'ASSESSMENT_RPC_ERROR'
 
 const ERROR_MESSAGES: Record<AssessmentErrorCode, string> = {
@@ -80,6 +101,42 @@ const ERROR_MESSAGES: Record<AssessmentErrorCode, string> = {
     'A liberação para a organização não pode indicar um participante específico.',
   ASSESSMENT_PARTICIPANT_NOT_ELIGIBLE:
     'O usuário selecionado não está elegível para participar das avaliações.',
+  PRACTICAL_ASSESSMENT_ORGANIZATION_REQUIRED:
+    'Selecione uma organização para registrar a avaliação prática.',
+  PRACTICAL_ASSESSMENT_MEMBER_REQUIRED:
+    'Selecione um participante para registrar a avaliação prática.',
+  PRACTICAL_ASSESSMENT_MANAGEMENT_FORBIDDEN:
+    'Seu perfil não possui permissão para consultar avaliações práticas deste participante.',
+  PRACTICAL_ASSESSMENT_SCORE_INVALID:
+    'Informe uma nota válida entre 0 e 100.',
+  PRACTICAL_ASSESSMENT_CRITICAL_ERRORS_INVALID:
+    'Informe uma quantidade válida de erros críticos.',
+  PRACTICAL_ASSESSMENT_CRITERIA_INVALID:
+    'Os critérios da avaliação prática estão em formato inválido.',
+  PRACTICAL_ASSESSMENT_EVIDENCE_INVALID:
+    'As evidências da avaliação prática estão em formato inválido.',
+  PRACTICAL_ASSESSMENT_NOTES_TOO_LONG:
+    'As observações da avaliação prática ultrapassam o limite permitido.',
+  PRACTICAL_ASSESSMENT_PLATFORM_ADMIN_CANNOT_EVALUATE:
+    'O Administrador da Plataforma acompanha a gestão, mas não atua como avaliador prático.',
+  PRACTICAL_ASSESSMENT_EVALUATOR_ROLE_REQUIRED:
+    'Somente Diretor ou Supervisor com vínculo ativo pode registrar avaliação prática.',
+  PRACTICAL_ASSESSMENT_TARGET_FORBIDDEN:
+    'O participante selecionado não está no seu escopo de gestão.',
+  PRACTICAL_ASSESSMENT_TARGET_NOT_ELIGIBLE:
+    'O participante selecionado não está elegível para o processo de avaliação.',
+  PRACTICAL_ASSESSMENT_TARGET_NOT_AVAILABLE:
+    'O participante selecionado não está disponível para esta avaliação.',
+  PRACTICAL_ASSESSMENT_REQUIREMENT_REQUIRED:
+    'Selecione um requisito prático para registrar a avaliação.',
+  PRACTICAL_ASSESSMENT_REQUIREMENT_NOT_AVAILABLE:
+    'O requisito prático selecionado não está disponível.',
+  PRACTICAL_ASSESSMENT_PROGRAM_VERSION_NOT_AVAILABLE:
+    'A versão do programa de certificação não está disponível.',
+  PRACTICAL_ASSESSMENT_TYPE_NOT_CONFIGURED:
+    'O tipo da avaliação prática não está configurado no requisito.',
+  PRACTICAL_ASSESSMENT_TYPE_UNSUPPORTED:
+    'O tipo da avaliação prática configurado não é suportado.',
   ASSESSMENT_RPC_ERROR:
     'Não foi possível concluir a operação de avaliação. Tente novamente.',
 }
@@ -269,3 +326,48 @@ export async function configureAssessmentAccess({
     'configure_assessment_access',
   )
 }
+
+export async function getManagedPracticalAssessmentRequirements(
+  organizationId: string,
+  organizationMemberId: string,
+): Promise<ManagedPracticalAssessmentRequirement[]> {
+  const { data, error } = await supabase.rpc(
+    'get_managed_practical_assessment_requirements',
+    {
+      p_organization_id: organizationId,
+      p_organization_member_id: organizationMemberId,
+    },
+  )
+
+  if (error) throw mapRpcError(error)
+  return (data ?? []) as ManagedPracticalAssessmentRequirement[]
+}
+
+export async function recordPracticalAssessment({
+  organizationId,
+  organizationMemberId,
+  certificationRequirementId,
+  score,
+  criticalErrors = 0,
+  criteriaScores = {},
+  notes = null,
+  evidence = [],
+}: RecordPracticalAssessmentInput): Promise<RecordPracticalAssessmentResponse> {
+  const { data, error } = await supabase.rpc('record_practical_assessment', {
+    p_organization_id: organizationId,
+    p_organization_member_id: organizationMemberId,
+    p_certification_requirement_id: certificationRequirementId,
+    p_score: score,
+    p_critical_errors: criticalErrors,
+    p_criteria_scores: criteriaScores,
+    p_notes: notes,
+    p_evidence: evidence,
+  })
+
+  if (error) throw mapRpcError(error)
+  return requireRpcData<RecordPracticalAssessmentResponse>(
+    data,
+    'record_practical_assessment',
+  )
+}
+
