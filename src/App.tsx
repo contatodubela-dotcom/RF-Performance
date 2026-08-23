@@ -30,6 +30,7 @@ import OperationsPage from '@/pages/app/OperationsPage'
 import OrganizationsPage from '@/pages/app/OrganizationsPage'
 import PlaceholderPage from '@/pages/app/PlaceholderPage'
 import Plan90DaysPage from '@/pages/app/Plan90DaysPage'
+import ResultsPage from '@/pages/app/ResultsPage'
 import SalesLocationsPage from '@/pages/app/SalesLocationsPage'
 import SettingsPage from '@/pages/app/SettingsPage'
 import TeamsPage from '@/pages/app/TeamsPage'
@@ -108,11 +109,7 @@ export default function App() {
                 path={ROUTES.RESULTS}
                 element={authorized(
                   ROUTES.RESULTS,
-                  <PlaceholderPage
-                    title="Resultados"
-                    description="Acompanhamento de cotas vendidas, conversão e desempenho comercial em tempo real."
-                    icon="TrendingUp"
-                  />,
+                  <ResultsPage />,
                 )}
               />
 
@@ -148,6 +145,7 @@ export default function App() {
                   <EvaluationsPage />,
                 )}
               />
+
               <Route
                 path={`${ROUTES.EVALUATIONS}/:attemptId`}
                 element={authorized(
