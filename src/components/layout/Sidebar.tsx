@@ -65,7 +65,6 @@ const NAV: NavSection[] = [
         label: 'Resultados',
         path: ROUTES.RESULTS,
         icon: TrendingUp,
-        pending: true,
       },
       {
         label: 'Ações',
