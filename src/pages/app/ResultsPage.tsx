@@ -16,6 +16,19 @@ import PageHeader from '@/components/shared/PageHeader'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import EmptyState from '@/components/shared/EmptyState'
 
+interface ValidatedSalesActual {
+  scope_type: 'organization' | 'sales_location' | 'team'
+  scope_id: string
+  actual_value: number | null
+}
+
+function getCurrentCompetenceMonth(): string {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+
+  return `${now.getFullYear()}-${month}-01`
+}
+
 function getMetadataNumber(
   goal: PerformanceGoal,
   key: string,
@@ -242,6 +255,38 @@ export default function ResultsPage() {
     error: planError,
   } = useCommercialPlanReference(orgId)
 
+  const competenceMonth = useMemo(
+    () => getCurrentCompetenceMonth(),
+    [],
+  )
+
+  const {
+    data: actuals = [],
+    isLoading: actualsLoading,
+    error: actualsError,
+  } = useQuery({
+    queryKey: [
+      'validated-sales-actuals',
+      plan?.id,
+      user?.id,
+      competenceMonth,
+    ],
+    enabled: !!plan?.id && !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc(
+        'get_validated_sales_actuals' as never,
+        {
+          p_plan_id: plan!.id,
+          p_competence_month: competenceMonth,
+        } as never,
+      )
+
+      if (error) throw error
+
+      return (data ?? []) as unknown as ValidatedSalesActual[]
+    },
+  })
+
   const {
     data: goals = [],
     isLoading: goalsLoading,
@@ -270,19 +315,38 @@ export default function ResultsPage() {
     },
   })
 
+  const actualValueByScope = useMemo(
+    () => new Map(
+      actuals.map((actual) => [
+        `${actual.scope_type}:${actual.scope_id}`,
+        actual.actual_value,
+      ] as const),
+    ),
+    [actuals],
+  )
+
+  const resultGoals = useMemo(
+    () => goals.map((goal) => ({
+      ...goal,
+      actual_value: actualValueByScope.get(
+        `${goal.scope_type}:${goal.scope_id}`,
+      ) ?? null,
+    })),
+    [goals, actualValueByScope],
+  )
   const mainGoal = useMemo(
     () =>
-      goals.find(
+      resultGoals.find(
         (goal) =>
           goal.scope_type === 'organization' &&
           goal.metric_code === 'validated_sales',
       ) ?? null,
-    [goals],
+    [resultGoals],
   )
 
   const locationGoals = useMemo(
     () =>
-      goals
+      resultGoals
         .filter(
           (goal) => goal.scope_type === 'sales_location',
         )
@@ -292,12 +356,12 @@ export default function ResultsPage() {
             'pt-BR',
           ),
         ),
-    [goals],
+    [resultGoals],
   )
 
   const teamGoals = useMemo(
     () =>
-      goals
+      resultGoals
         .filter((goal) => goal.scope_type === 'team')
         .sort((first, second) =>
           getScopeLabel(first).localeCompare(
@@ -305,10 +369,10 @@ export default function ResultsPage() {
             'pt-BR',
           ),
         ),
-    [goals],
+    [resultGoals],
   )
 
-  if (planLoading || goalsLoading) {
+  if (planLoading || goalsLoading || actualsLoading) {
     return (
       <div className="page-container flex min-h-[400px] items-center justify-center">
         <LoadingSpinner size="lg" />
@@ -316,13 +380,15 @@ export default function ResultsPage() {
     )
   }
 
-  if (planError || goalsError) {
+  if (planError || goalsError || actualsError) {
     const message =
       planError instanceof Error
         ? planError.message
         : goalsError instanceof Error
           ? goalsError.message
-          : 'Não foi possível carregar os resultados comerciais.'
+          : actualsError instanceof Error
+            ? actualsError.message
+            : 'Não foi possível carregar os resultados comerciais.'
 
     return (
       <div className="page-container">
@@ -371,11 +437,10 @@ export default function ResultsPage() {
       />
 
       <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-        O realizado apresentado nesta página utiliza a apuração
-        consolidada registrada nas metas comerciais. Enquanto não
-        houver apuração, o sistema exibe “Sem apuração” e não assume
-        resultado zero. Esta etapa não calcula conversão nem vendas
-        transacionais em tempo real.
+        O realizado apresentado nesta página é calculado automaticamente
+        a partir das vendas validadas da competência atual. Enquanto não
+        houver apuração válida, o sistema exibe “Sem apuração” e não
+        assume resultado zero.
       </div>
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
