@@ -40,6 +40,22 @@ interface SalespersonDrilldownActual {
   actual_value: number | null
 }
 
+interface CommercialProductivityIndicator {
+  plan_id: string
+  organization_id: string
+  competence_month: string
+  metric_code:
+    | 'average_per_salesperson'
+    | 'average_per_pdv'
+  label: string
+  unit: string
+  target_value: number | null
+  operational_reference: number | null
+  denominator: number | null
+  validated_units: number | null
+  actual_value: number | null
+}
+
 function getCurrentCompetenceMonth(): string {
   const now = new Date()
   const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -496,6 +512,129 @@ function SalespersonDrilldownTable({
   )
 }
 
+function ProductivityIndicatorsSection({
+  indicators,
+}: {
+  indicators: CommercialProductivityIndicator[]
+}) {
+  if (indicators.length === 0) return null
+
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-start gap-3 border-b border-gray-100 px-5 py-4">
+        <div className="rounded-lg bg-brand-50 p-2 text-brand-700">
+          <Gauge className="h-5 w-5" />
+        </div>
+
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">
+            Indicadores de produtividade
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Médias mensais calculadas automaticamente sobre as
+            vendas validadas da competência atual.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 p-5 md:grid-cols-2">
+        {indicators.map((indicator) => {
+          const achievement = calculateAchievement(
+            indicator.actual_value,
+            indicator.target_value,
+          )
+          const denominatorLabel =
+            indicator.metric_code === 'average_per_salesperson'
+              ? 'produtores ativos'
+              : 'PDVs ativos'
+
+          return (
+            <div
+              key={indicator.metric_code}
+              className="rounded-xl border border-gray-200 bg-gray-50 p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {indicator.label}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {indicator.metric_code ===
+                    'average_per_salesperson'
+                      ? 'Cotas validadas por produtor considerado no plano.'
+                      : 'Cotas validadas por PDV considerado no plano.'}
+                  </p>
+                </div>
+
+                {indicator.metric_code ===
+                'average_per_salesperson' ? (
+                  <Users2 className="h-5 w-5 shrink-0 text-brand-700" />
+                ) : (
+                  <MapPin className="h-5 w-5 shrink-0 text-brand-700" />
+                )}
+              </div>
+
+              <p
+                className={`mt-4 font-bold ${
+                  indicator.actual_value == null
+                    ? 'text-xl text-gray-600'
+                    : 'text-3xl text-gray-900'
+                }`}
+              >
+                {formatActual(indicator.actual_value)}
+              </p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-gray-500">
+                    Referência operacional
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-gray-800">
+                    {formatNumber(
+                      indicator.operational_reference,
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-gray-500">
+                    Meta
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-gray-800">
+                    {formatNumber(indicator.target_value)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-gray-500">
+                    Base de cálculo
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-gray-800">
+                    {indicator.denominator == null
+                      ? '—'
+                      : `${formatNumber(
+                          indicator.denominator,
+                        )} ${denominatorLabel}`}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-gray-500">
+                    Atingimento
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-gray-800">
+                    {formatAchievement(achievement)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 export default function ResultsPage() {
   const { activeOrganization, user } = useAuth()
   const orgId = activeOrganization?.id
@@ -561,6 +700,33 @@ export default function ResultsPage() {
       if (error) throw error
 
       return (data ?? []) as unknown as SalespersonDrilldownActual[]
+    },
+  })
+
+  const {
+    data: productivityIndicators = [],
+    isLoading: productivityIndicatorsLoading,
+    error: productivityIndicatorsError,
+  } = useQuery({
+    queryKey: [
+      'commercial-productivity-indicators',
+      plan?.id,
+      user?.id,
+      competenceMonth,
+    ],
+    enabled: !!plan?.id && !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc(
+        'get_commercial_productivity_indicators' as never,
+        {
+          p_plan_id: plan!.id,
+          p_competence_month: competenceMonth,
+        } as never,
+      )
+
+      if (error) throw error
+
+      return (data ?? []) as unknown as CommercialProductivityIndicator[]
     },
   })
 
@@ -653,7 +819,8 @@ export default function ResultsPage() {
     planLoading ||
     goalsLoading ||
     actualsLoading ||
-    salespersonDrilldownLoading
+    salespersonDrilldownLoading ||
+    productivityIndicatorsLoading
   ) {
     return (
       <div className="page-container flex min-h-[400px] items-center justify-center">
@@ -666,7 +833,8 @@ export default function ResultsPage() {
     planError ||
     goalsError ||
     actualsError ||
-    salespersonDrilldownError
+    salespersonDrilldownError ||
+    productivityIndicatorsError
   ) {
     const message =
       planError instanceof Error
@@ -677,7 +845,9 @@ export default function ResultsPage() {
             ? actualsError.message
             : salespersonDrilldownError instanceof Error
               ? salespersonDrilldownError.message
-              : 'Não foi possível carregar os resultados comerciais.'
+              : productivityIndicatorsError instanceof Error
+                ? productivityIndicatorsError.message
+                : 'Não foi possível carregar os resultados comerciais.'
 
     return (
       <div className="page-container">
@@ -801,6 +971,10 @@ export default function ResultsPage() {
       </section>
 
       <div className="space-y-6">
+        <ProductivityIndicatorsSection
+          indicators={productivityIndicators}
+        />
+
         <ResultsTable
           title="Resultados por PDV"
           description="Referência operacional, meta plena e realizado das unidades visíveis para o seu perfil."
