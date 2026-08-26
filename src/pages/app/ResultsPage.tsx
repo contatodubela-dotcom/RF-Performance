@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import {
   BarChart3,
   Gauge,
   MapPin,
@@ -15,6 +22,14 @@ import type { PerformanceGoal } from '@/types/commercialPlan'
 import PageHeader from '@/components/shared/PageHeader'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import EmptyState from '@/components/shared/EmptyState'
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart'
 
 interface ValidatedSalesActual {
   scope_type:
@@ -55,6 +70,28 @@ interface CommercialProductivityIndicator {
   validated_units: number | null
   actual_value: number | null
 }
+
+const resultsComparisonChartConfig = {
+  actual: {
+    label: 'Realizado',
+    color: '#15803d',
+  },
+  operationalReference: {
+    label: 'Referência operacional',
+    color: '#4ade80',
+  },
+  target: {
+    label: 'Meta plena',
+    color: '#14532d',
+  },
+} satisfies ChartConfig
+
+const salespersonRankingChartConfig = {
+  actual: {
+    label: 'Realizado',
+    color: '#15803d',
+  },
+} satisfies ChartConfig
 
 function getCurrentCompetenceMonth(): string {
   const now = new Date()
@@ -508,6 +545,362 @@ function SalespersonDrilldownTable({
           </table>
         </div>
       )}
+    </section>
+  )
+}
+
+function ResultsComparisonChart({
+  title,
+  description,
+  icon: Icon,
+  goals,
+}: {
+  title: string
+  description: string
+  icon: typeof MapPin
+  goals: PerformanceGoal[]
+}) {
+  if (goals.length === 0) return null
+
+  const chartData = goals.map((goal) => ({
+    name: getScopeLabel(goal),
+    operationalReference: getMetadataNumber(
+      goal,
+      'current_operational_reference',
+    ),
+    target: goal.target_value,
+    actual: goal.actual_value,
+  }))
+
+  const hasActual = chartData.some((item) => item.actual != null)
+  const chartHeight = Math.max(300, chartData.length * 54)
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="rounded-lg bg-brand-50 p-2 text-brand-700">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">
+              {title}
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              {description}
+            </p>
+          </div>
+        </div>
+
+        {!hasActual && (
+          <span className="w-fit rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+            Sem apuração realizada
+          </span>
+        )}
+      </div>
+
+      <div className="px-3 py-4 sm:px-5">
+        <ChartContainer
+          config={resultsComparisonChartConfig}
+          className="w-full aspect-auto"
+          style={{ height: chartHeight }}
+        >
+          <BarChart
+            accessibilityLayer
+            data={chartData}
+            layout="vertical"
+            margin={{ left: 0, right: 20 }}
+          >
+            <CartesianGrid horizontal={false} />
+            <YAxis
+              dataKey="name"
+              type="category"
+              tickLine={false}
+              axisLine={false}
+              width={150}
+              tickMargin={8}
+            />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              allowDecimals={false}
+              tickFormatter={(value) => formatNumber(Number(value))}
+            />
+            <ChartTooltip
+              cursor={false}
+              content={<ChartTooltipContent indicator="line" />}
+            />
+            <ChartLegend content={<ChartLegendContent />} />
+            <Bar
+              dataKey="operationalReference"
+              fill="var(--color-operationalReference)"
+              radius={4}
+            />
+            <Bar
+              dataKey="target"
+              fill="var(--color-target)"
+              radius={4}
+            />
+            <Bar
+              dataKey="actual"
+              fill="var(--color-actual)"
+              radius={4}
+            />
+          </BarChart>
+        </ChartContainer>
+      </div>
+    </div>
+  )
+}
+
+function CommercialVisualManagementSection({
+  mainGoal,
+  locationGoals,
+  teamGoals,
+  salespersonRows,
+}: {
+  mainGoal: PerformanceGoal
+  locationGoals: PerformanceGoal[]
+  teamGoals: PerformanceGoal[]
+  salespersonRows: SalespersonDrilldownActual[]
+}) {
+  const consolidatedChartData = [
+    {
+      name: 'Competência atual',
+      operationalReference: getMetadataNumber(
+        mainGoal,
+        'current_operational_reference',
+      ),
+      target: mainGoal.target_value,
+      actual: mainGoal.actual_value,
+    },
+  ]
+
+  const salespersonRankingData = useMemo(() => {
+    const bySalesperson = new Map<
+      string,
+      { name: string; actual: number | null }
+    >()
+
+    salespersonRows.forEach((row) => {
+      const current = bySalesperson.get(row.salesperson_member_id)
+
+      if (!current) {
+        bySalesperson.set(row.salesperson_member_id, {
+          name: row.salesperson_name,
+          actual: row.actual_value,
+        })
+        return
+      }
+
+      if (current.actual == null || row.actual_value == null) {
+        current.actual = null
+        return
+      }
+
+      current.actual += row.actual_value
+    })
+
+    return Array.from(bySalesperson.values()).sort((first, second) => {
+      if (first.actual == null && second.actual == null) {
+        return first.name.localeCompare(second.name, 'pt-BR')
+      }
+      if (first.actual == null) return 1
+      if (second.actual == null) return -1
+      if (second.actual !== first.actual) return second.actual - first.actual
+      return first.name.localeCompare(second.name, 'pt-BR')
+    })
+  }, [salespersonRows])
+
+  const hasSalespersonActual = salespersonRankingData.some(
+    (item) => item.actual != null,
+  )
+  const salespersonChartHeight = Math.max(
+    300,
+    salespersonRankingData.length * 46,
+  )
+
+  return (
+    <section className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 shadow-sm sm:p-5">
+      <div className="mb-5 flex items-start gap-3">
+        <div className="rounded-lg bg-brand-700 p-2 text-white">
+          <BarChart3 className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">
+            Gestão visual dos resultados
+          </h2>
+          <p className="mt-1 max-w-3xl text-sm text-gray-500">
+            Leitura gerencial da competência atual com comparação entre
+            referência operacional, meta plena e realizado, sem alterar
+            a fonte de apuração das vendas validadas.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm xl:col-span-2">
+          <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">
+                Visão consolidada do mês
+              </h3>
+              <p className="mt-1 text-xs leading-5 text-gray-500">
+                Comparativo geral entre a capacidade atual de referência,
+                a meta mensal e o realizado validado.
+              </p>
+            </div>
+
+            {mainGoal.actual_value == null && (
+              <span className="w-fit rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                Sem apuração realizada
+              </span>
+            )}
+          </div>
+
+          <div className="px-3 py-4 sm:px-5">
+            <ChartContainer
+              config={resultsComparisonChartConfig}
+              className="h-[300px] w-full aspect-auto"
+            >
+              <BarChart
+                accessibilityLayer
+                data={consolidatedChartData}
+                margin={{ left: 0, right: 12 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                  width={44}
+                  tickFormatter={(value) => formatNumber(Number(value))}
+                />
+                <ChartTooltip
+                  cursor={false}
+                  content={<ChartTooltipContent indicator="line" />}
+                />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar
+                  dataKey="operationalReference"
+                  fill="var(--color-operationalReference)"
+                  radius={4}
+                />
+                <Bar
+                  dataKey="target"
+                  fill="var(--color-target)"
+                  radius={4}
+                />
+                <Bar
+                  dataKey="actual"
+                  fill="var(--color-actual)"
+                  radius={4}
+                />
+              </BarChart>
+            </ChartContainer>
+          </div>
+        </div>
+
+        <ResultsComparisonChart
+          title="Desempenho por PDV"
+          description="Comparação visual das unidades comerciais da competência atual."
+          icon={MapPin}
+          goals={locationGoals}
+        />
+
+        <ResultsComparisonChart
+          title="Desempenho por equipe"
+          description="Comparação visual das equipes comerciais da competência atual."
+          icon={Users2}
+          goals={teamGoals}
+        />
+
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm xl:col-span-2">
+          <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-brand-50 p-2 text-brand-700">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Ranking por vendedor
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-gray-500">
+                  Total validado por vendedor na competência, somando
+                  atribuições históricas do mesmo vendedor quando houver.
+                </p>
+              </div>
+            </div>
+
+            {!hasSalespersonActual && (
+              <span className="w-fit rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                Sem apuração realizada
+              </span>
+            )}
+          </div>
+
+          {salespersonRankingData.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm font-medium text-gray-700">
+                Nenhuma venda validada atribuída a vendedor nesta
+                competência.
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                O ranking será exibido quando houver apuração atribuída a
+                vendedor.
+              </p>
+            </div>
+          ) : (
+            <div className="px-3 py-4 sm:px-5">
+              <ChartContainer
+                config={salespersonRankingChartConfig}
+                className="w-full aspect-auto"
+                style={{ height: salespersonChartHeight }}
+              >
+                <BarChart
+                  accessibilityLayer
+                  data={salespersonRankingData}
+                  layout="vertical"
+                  margin={{ left: 0, right: 20 }}
+                >
+                  <CartesianGrid horizontal={false} />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    tickLine={false}
+                    axisLine={false}
+                    width={160}
+                    tickMargin={8}
+                  />
+                  <XAxis
+                    type="number"
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                    tickFormatter={(value) => formatNumber(Number(value))}
+                  />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="line" />}
+                  />
+                  <Bar
+                    dataKey="actual"
+                    fill="var(--color-actual)"
+                    radius={4}
+                  />
+                </BarChart>
+              </ChartContainer>
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   )
 }
@@ -971,6 +1364,13 @@ export default function ResultsPage() {
       </section>
 
       <div className="space-y-6">
+        <CommercialVisualManagementSection
+          mainGoal={mainGoal}
+          locationGoals={locationGoals}
+          teamGoals={teamGoals}
+          salespersonRows={salespersonDrilldown}
+        />
+
         <ProductivityIndicatorsSection
           indicators={productivityIndicators}
         />
