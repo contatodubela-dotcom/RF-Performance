@@ -30,6 +30,18 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
+interface CommercialResultCompetence {
+  competence_month: string
+  is_current: boolean
+}
 
 interface ValidatedSalesActual {
   scope_type:
@@ -98,6 +110,31 @@ function getCurrentCompetenceMonth(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0')
 
   return `${now.getFullYear()}-${month}-01`
+}
+
+function formatCompetenceLabel(competenceMonth: string): string {
+  const [year, month] = competenceMonth
+    .split('-')
+    .map(Number)
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    month < 1 ||
+    month > 12
+  ) {
+    return competenceMonth
+  }
+
+  const label = new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(
+    new Date(Date.UTC(year, month - 1, 1)),
+  )
+
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 function getMetadataNumber(
@@ -659,15 +696,17 @@ function CommercialVisualManagementSection({
   locationGoals,
   teamGoals,
   salespersonRows,
+  competenceLabel,
 }: {
   mainGoal: PerformanceGoal
   locationGoals: PerformanceGoal[]
   teamGoals: PerformanceGoal[]
   salespersonRows: SalespersonDrilldownActual[]
+  competenceLabel: string
 }) {
   const consolidatedChartData = [
     {
-      name: 'Competência atual',
+      name: competenceLabel,
       operationalReference: getMetadataNumber(
         mainGoal,
         'current_operational_reference',
@@ -732,7 +771,7 @@ function CommercialVisualManagementSection({
             Gestão visual dos resultados
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-gray-500">
-            Leitura gerencial da competência atual com comparação entre
+            Leitura gerencial de {competenceLabel} com comparação entre
             referência operacional, meta plena e realizado, sem alterar
             a fonte de apuração das vendas validadas.
           </p>
@@ -747,8 +786,8 @@ function CommercialVisualManagementSection({
                 Visão consolidada do mês
               </h3>
               <p className="mt-1 text-xs leading-5 text-gray-500">
-                Comparativo geral entre a capacidade atual de referência,
-                a meta mensal e o realizado validado.
+                Comparativo geral entre a referência operacional da
+                competência, a meta mensal e o realizado validado.
               </p>
             </div>
 
@@ -810,14 +849,14 @@ function CommercialVisualManagementSection({
 
         <ResultsComparisonChart
           title="Desempenho por PDV"
-          description="Comparação visual das unidades comerciais da competência atual."
+          description={`Comparação visual das unidades comerciais em ${competenceLabel}.`}
           icon={MapPin}
           goals={locationGoals}
         />
 
         <ResultsComparisonChart
           title="Desempenho por equipe"
-          description="Comparação visual das equipes comerciais da competência atual."
+          description={`Comparação visual das equipes comerciais em ${competenceLabel}.`}
           icon={Users2}
           goals={teamGoals}
         />
@@ -907,8 +946,10 @@ function CommercialVisualManagementSection({
 
 function ProductivityIndicatorsSection({
   indicators,
+  competenceLabel,
 }: {
   indicators: CommercialProductivityIndicator[]
+  competenceLabel: string
 }) {
   if (indicators.length === 0) return null
 
@@ -925,7 +966,7 @@ function ProductivityIndicatorsSection({
           </h2>
           <p className="mt-1 text-sm text-gray-500">
             Médias mensais calculadas automaticamente sobre as
-            vendas validadas da competência atual.
+            vendas validadas em {competenceLabel}.
           </p>
         </div>
       </div>
@@ -1038,10 +1079,34 @@ export default function ResultsPage() {
     error: planError,
   } = useCommercialPlanReference(orgId)
 
-  const competenceMonth = useMemo(
+  const [competenceMonth, setCompetenceMonth] = useState(
     () => getCurrentCompetenceMonth(),
-    [],
   )
+
+  const {
+    data: competences = [],
+    isLoading: competencesLoading,
+    error: competencesError,
+  } = useQuery({
+    queryKey: [
+      'commercial-result-competences',
+      plan?.id,
+      user?.id,
+    ],
+    enabled: !!plan?.id && !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc(
+        'get_commercial_result_competences' as never,
+        {
+          p_plan_id: plan!.id,
+        } as never,
+      )
+
+      if (error) throw error
+
+      return (data ?? []) as unknown as CommercialResultCompetence[]
+    },
+  })
 
   const {
     data: actuals = [],
@@ -1133,21 +1198,22 @@ export default function ResultsPage() {
       plan?.id,
       user?.id,
       'validated-sales',
+      competenceMonth,
     ],
     enabled: !!plan?.id && !!user?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('performance_goals')
-        .select('*')
-        .eq('plan_id', plan!.id)
-        .eq('metric_code', 'validated_sales')
-        .neq('status', 'archived')
-        .order('scope_type')
-        .order('label')
+      const { data, error } = await supabase.rpc(
+        'get_performance_goals_for_competence' as never,
+        {
+          p_plan_id: plan!.id,
+          p_competence_month: competenceMonth,
+        } as never,
+      )
 
       if (error) throw error
 
-      return (data ?? []) as PerformanceGoal[]
+      return ((data ?? []) as unknown as PerformanceGoal[])
+        .filter((goal) => goal.metric_code === 'validated_sales')
     },
   })
 
@@ -1210,6 +1276,7 @@ export default function ResultsPage() {
 
   if (
     planLoading ||
+    competencesLoading ||
     goalsLoading ||
     actualsLoading ||
     salespersonDrilldownLoading ||
@@ -1224,6 +1291,7 @@ export default function ResultsPage() {
 
   if (
     planError ||
+    competencesError ||
     goalsError ||
     actualsError ||
     salespersonDrilldownError ||
@@ -1232,15 +1300,17 @@ export default function ResultsPage() {
     const message =
       planError instanceof Error
         ? planError.message
-        : goalsError instanceof Error
-          ? goalsError.message
-          : actualsError instanceof Error
-            ? actualsError.message
-            : salespersonDrilldownError instanceof Error
-              ? salespersonDrilldownError.message
-              : productivityIndicatorsError instanceof Error
-                ? productivityIndicatorsError.message
-                : 'Não foi possível carregar os resultados comerciais.'
+        : competencesError instanceof Error
+          ? competencesError.message
+          : goalsError instanceof Error
+            ? goalsError.message
+            : actualsError instanceof Error
+              ? actualsError.message
+              : salespersonDrilldownError instanceof Error
+                ? salespersonDrilldownError.message
+                : productivityIndicatorsError instanceof Error
+                  ? productivityIndicatorsError.message
+                  : 'Não foi possível carregar os resultados comerciais.'
 
     return (
       <div className="page-container">
@@ -1272,6 +1342,35 @@ export default function ResultsPage() {
     )
   }
 
+  const competenceLabel = formatCompetenceLabel(competenceMonth)
+
+  const competenceSelector = (
+    <div className="w-full sm:w-[220px]">
+      <label className="text-xs font-medium text-gray-600">
+        Competência
+      </label>
+      <Select
+        value={competenceMonth}
+        onValueChange={setCompetenceMonth}
+      >
+        <SelectTrigger className="mt-1 bg-white">
+          <SelectValue placeholder="Selecione a competência" />
+        </SelectTrigger>
+        <SelectContent>
+          {competences.slice().reverse().map((competence) => (
+            <SelectItem
+              key={competence.competence_month}
+              value={competence.competence_month}
+            >
+              {formatCompetenceLabel(competence.competence_month)}
+              {competence.is_current ? ' (atual)' : ''}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+
   const operationalReference = getMetadataNumber(
     mainGoal,
     'current_operational_reference',
@@ -1286,11 +1385,12 @@ export default function ResultsPage() {
       <PageHeader
         title="Resultados"
         description="Meta, referência operacional e realizado consolidado de cotas validadas."
+        action={competenceSelector}
       />
 
       <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
         O realizado apresentado nesta página é calculado automaticamente
-        a partir das vendas validadas da competência atual. Enquanto não
+        a partir das vendas validadas em {competenceLabel}. Enquanto não
         houver apuração válida, o sistema exibe “Sem apuração” e não
         assume resultado zero.
       </div>
@@ -1322,7 +1422,7 @@ export default function ResultsPage() {
             {formatNumber(operationalReference)}
           </p>
           <p className="mt-1 text-xs text-gray-500">
-            capacidade atual de referência
+            referência operacional da competência
           </p>
         </div>
 
@@ -1369,10 +1469,12 @@ export default function ResultsPage() {
           locationGoals={locationGoals}
           teamGoals={teamGoals}
           salespersonRows={salespersonDrilldown}
+          competenceLabel={competenceLabel}
         />
 
         <ProductivityIndicatorsSection
           indicators={productivityIndicators}
+          competenceLabel={competenceLabel}
         />
 
         <ResultsTable
@@ -1390,6 +1492,7 @@ export default function ResultsPage() {
         />
 
         <SalespersonDrilldownTable
+          key={competenceMonth}
           rows={salespersonDrilldown}
         />
       </div>
