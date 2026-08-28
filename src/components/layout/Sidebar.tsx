@@ -62,6 +62,11 @@ const NAV: NavSection[] = [
         icon: Target,
       },
       {
+        label: 'Vendas',
+        path: ROUTES.COMMERCIAL_SALES,
+        icon: Briefcase,
+      },
+      {
         label: 'Resultados',
         path: ROUTES.RESULTS,
         icon: TrendingUp,

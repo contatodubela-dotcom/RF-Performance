@@ -21,6 +21,8 @@ export function usePermissions() {
     canViewUsers: isAdmin || isDirector || isSupervisor,
     canManageUsers: isAdmin || isDirector,
     canInviteUsers: isAdmin || isDirector || isSupervisor,
+    canViewCommercialSales: isAdmin || isDirector || isSupervisor,
+    canManageCommercialSales: isAdmin || isDirector,
     canViewAdmin: isAdmin || isDirector,
 
     hasRole: (roles: string[]) => !!currentRole && roles.includes(currentRole),

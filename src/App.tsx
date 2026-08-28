@@ -24,6 +24,7 @@ import AssessmentResultPage from '@/pages/app/AssessmentResultPage'
 import EvaluationsPage from '@/pages/app/EvaluationsPage'
 import FeedbacksPage from '@/pages/app/FeedbacksPage'
 import GoalsPage from '@/pages/app/GoalsPage'
+import CommercialSalesPage from '@/pages/app/CommercialSalesPage'
 import HomePage from '@/pages/app/HomePage'
 import MeetingsPage from '@/pages/app/MeetingsPage'
 import OperationsPage from '@/pages/app/OperationsPage'
@@ -102,6 +103,13 @@ export default function App() {
                 element={authorized(
                   ROUTES.GOALS,
                   <GoalsPage />,
+                )}
+              />
+              <Route
+                path={ROUTES.COMMERCIAL_SALES}
+                element={authorized(
+                  ROUTES.COMMERCIAL_SALES,
+                  <CommercialSalesPage />,
                 )}
               />
 

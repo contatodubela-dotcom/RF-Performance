@@ -6,6 +6,12 @@
 export type SystemRole = 'platform_admin'
 export type OrgRole = 'director' | 'supervisor' | 'salesperson'
 export type RecordStatus = 'active' | 'inactive' | 'archived'
+export type CommercialSaleValidationStatus =
+  | 'pending'
+  | 'validated'
+  | 'rejected'
+  | 'cancelled'
+
 export type SourceSystem =
   | 'rf_performance'
   | 'epsa_core'
@@ -147,6 +153,30 @@ export interface TeamMember {
   metadata: Record<string, unknown>
 }
 
+export interface CommercialSale {
+  id: string
+  organization_id: string
+  operation_id: string
+  sales_location_id: string
+  team_id: string
+  salesperson_member_id: string | null
+  sale_date: string
+  competence_month: string
+  units_count: number
+  validation_status: CommercialSaleValidationStatus
+  validated_at: string | null
+  validated_by: string | null
+  status_reason: string | null
+  source_system: SourceSystem
+  external_id: string | null
+  created_at: string
+  created_by: string | null
+  updated_at: string
+  updated_by: string | null
+  archived_at: string | null
+  metadata: Record<string, unknown>
+}
+
 export interface AuditLog {
   id: string
   organization_id: string | null
@@ -173,4 +203,11 @@ export interface TeamWithRelations extends Team {
 
 export interface TeamMemberWithRelations extends TeamMember {
   organization_member?: OrganizationMemberWithProfile
+}
+
+export interface CommercialSaleWithRelations extends CommercialSale {
+  operation?: Operation
+  sales_location?: SalesLocation
+  team?: Team
+  salesperson_member?: OrganizationMemberWithProfile
 }
