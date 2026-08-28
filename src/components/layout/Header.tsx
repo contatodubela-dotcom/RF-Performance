@@ -15,6 +15,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   configuracoes: 'Configurações',
   'plano-90-dias': 'Plano de 90 Dias',
   metas: 'Metas',
+  vendas: 'Vendas',
   resultados: 'Resultados',
   acoes: 'Ações',
   reunioes: 'Reuniões',

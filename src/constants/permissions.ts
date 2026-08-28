@@ -43,6 +43,7 @@ export const ROUTE_ACCESS: Partial<
   // Gestão estratégica
   [ROUTES.PLAN_90_DAYS]: MANAGEMENT_ROLES,
   [ROUTES.GOALS]: MANAGEMENT_ROLES,
+  [ROUTES.COMMERCIAL_SALES]: TEAM_MANAGEMENT_ROLES,
   [ROUTES.RESULTS]: MANAGEMENT_ROLES,
 
   // Ações ainda possuem leitura organizacional ampla no banco.

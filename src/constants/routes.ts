@@ -19,6 +19,7 @@ export const ROUTES = {
   // Gestão (future)
   PLAN_90_DAYS: '/app/plano-90-dias',
   GOALS: '/app/metas',
+  COMMERCIAL_SALES: '/app/vendas',
   RESULTS: '/app/resultados',
   ACTIONS: '/app/acoes',
   MEETINGS: '/app/reunioes',
