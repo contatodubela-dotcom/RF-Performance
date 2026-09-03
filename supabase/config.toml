@@ -415,3 +415,6 @@ enabled = true
 
 [functions.invite-user]
 verify_jwt = false
+
+[functions.resend-user-access]
+verify_jwt = false
