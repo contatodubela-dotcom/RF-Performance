@@ -497,6 +497,10 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState('')
   const [inviteOpen, setInviteOpen] = useState(false)
   const [toggleConfirm, setToggleConfirm] = useState<{ id: string; name: string; status: string } | null>(null)
+  const [resendConfirm, setResendConfirm] = useState<{
+    id: string
+    name: string
+  } | null>(null)
 
   const orgId = activeOrganization?.id
 
@@ -581,6 +585,61 @@ export default function UsersPage() {
     onSuccess: (_, vars) => {
       toast.success(`Usuário ${vars.currentStatus === 'active' ? 'inativado' : 'ativado'}.`)
       qc.invalidateQueries({ queryKey: ['org-members'] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const resendMutation = useMutation({
+    mutationFn: async ({ membershipId }: { membershipId: string }) => {
+      if (!orgId) throw new Error('Nenhuma organização ativa.')
+
+      const { data: result, error } = await supabase.functions.invoke(
+        'resend-user-access',
+        {
+          body: {
+            organization_id: orgId,
+            membership_id: membershipId,
+          },
+        },
+      )
+
+      if (error) {
+        let message = error.message
+
+        if (error instanceof FunctionsHttpError) {
+          try {
+            const payload = await error.context?.json() as {
+              error?: string
+              message?: string
+              code?: string
+            } | undefined
+
+            const detail =
+              payload?.error ??
+              payload?.message ??
+              message
+
+            message = payload?.code
+              ? `${detail} [${payload.code}]`
+              : detail
+          } catch {
+            // Mantém a mensagem original quando a resposta não é JSON.
+          }
+        }
+
+        throw new Error(message)
+      }
+
+      return result as {
+        success: boolean
+        invite_sent: boolean
+        message?: string
+      }
+    },
+    onSuccess: (result) => {
+      toast.success(
+        result.message ?? 'Novo link de acesso enviado com sucesso.',
+      )
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -739,19 +798,38 @@ export default function UsersPage() {
                         {formatRelativeDate(p?.last_access_at)}
                       </td>
                       <td className="table-td text-right">
-                        {canManageUsers &&
-                          m.user_id !== profile?.id &&
-                          (isAdmin || m.role !== ORG_ROLES.DIRECTOR) && (
-                          <button
-                            onClick={() => setToggleConfirm({ id: m.id, name: displayName, status: m.status })}
-                            className={`p-1.5 rounded text-sm ${m.status === 'active' ? 'text-gray-400 hover:text-yellow-600 hover:bg-yellow-50' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
-                            title={m.status === 'active' ? 'Inativar' : 'Ativar'}
-                          >
-                            {m.status === 'active'
-                              ? <ToggleRight className="h-5 w-5" />
-                              : <ToggleLeft className="h-5 w-5" />}
-                          </button>
-                        )}
+                        <div className="flex justify-end gap-1">
+                          {canInviteUsers &&
+                            m.status === 'active' &&
+                            m.user_id !== profile?.id &&
+                            (isAdmin || m.role !== ORG_ROLES.DIRECTOR) && (
+                            <button
+                              type="button"
+                              onClick={() => setResendConfirm({ id: m.id, name: displayName })}
+                              className="p-1.5 rounded text-sm text-gray-400 hover:text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Reenviar acesso"
+                              aria-label={`Reenviar acesso para ${displayName}`}
+                              disabled={resendMutation.isPending}
+                            >
+                              <Mail className="h-5 w-5" />
+                            </button>
+                          )}
+
+                          {canManageUsers &&
+                            m.user_id !== profile?.id &&
+                            (isAdmin || m.role !== ORG_ROLES.DIRECTOR) && (
+                            <button
+                              type="button"
+                              onClick={() => setToggleConfirm({ id: m.id, name: displayName, status: m.status })}
+                              className={`p-1.5 rounded text-sm ${m.status === 'active' ? 'text-gray-400 hover:text-yellow-600 hover:bg-yellow-50' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
+                              title={m.status === 'active' ? 'Inativar' : 'Ativar'}
+                            >
+                              {m.status === 'active'
+                                ? <ToggleRight className="h-5 w-5" />
+                                : <ToggleLeft className="h-5 w-5" />}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -793,6 +871,19 @@ export default function UsersPage() {
           setToggleConfirm(null)
         }}
         onCancel={() => setToggleConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={!!resendConfirm}
+        title="Reenviar link de acesso?"
+        description={`Um novo e-mail de acesso será enviado para "${resendConfirm?.name}". Use esta ação somente quando o usuário ainda não tiver ativado o acesso.`}
+        onConfirm={() => {
+          if (resendConfirm) {
+            resendMutation.mutate({ membershipId: resendConfirm.id })
+          }
+          setResendConfirm(null)
+        }}
+        onCancel={() => setResendConfirm(null)}
       />
     </div>
   )
