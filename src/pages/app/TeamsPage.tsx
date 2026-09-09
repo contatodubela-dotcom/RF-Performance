@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
+  ArrowRightLeft,
   BadgeCheck,
   Clock3,
   Pencil,
@@ -25,6 +26,7 @@ import {
   updateSetupMetadata,
 } from '@/lib/setupMetadata'
 import type { OrgRole, Team, TeamMember } from '@/types/database'
+import { transferSalespersonTeam } from '@/services/teamTransferService'
 import PageHeader from '@/components/shared/PageHeader'
 import StatusBadge from '@/components/shared/StatusBadge'
 import EmptyState from '@/components/shared/EmptyState'
@@ -59,9 +61,12 @@ type TeamMemberSummary = {
 type TeamRow = Team & {
   sales_location: { name: string } | null
   supervisor: {
-    user_id: string
-    profiles: ProfileRelation | ProfileRelation[] | null
-  } | null
+  user_id: string
+  role: OrgRole
+  status: string
+  archived_at: string | null
+  profiles: ProfileRelation | ProfileRelation[] | null
+} | null
   team_members: TeamMemberSummary[] | null
 }
 
@@ -368,17 +373,39 @@ function TeamForm({
 function MembersPanel({
   team,
   orgId,
+  teams,
   canManage,
   onClose,
 }: {
   team: TeamRow
   orgId: string
+  teams: TeamRow[]
   canManage: boolean
   onClose: () => void
 }) {
   const { profile } = useAuth()
   const qc = useQueryClient()
   const [selectedMemberId, setSelectedMemberId] = useState('')
+  const [transferMember, setTransferMember] = useState<TeamMemberRow | null>(
+    null,
+  )
+  const [destinationTeamId, setDestinationTeamId] = useState('')
+
+  const destinationTeams = useMemo(
+  () =>
+    teams.filter(
+      (candidate) =>
+        candidate.id !== team.id &&
+        candidate.status === 'active' &&
+        !candidate.archived_at &&
+        !!candidate.sales_location &&
+        !!candidate.supervisor &&
+        candidate.supervisor.role === 'supervisor' &&
+        candidate.supervisor.status === 'active' &&
+        !candidate.supervisor.archived_at,
+    ),
+  [team.id, teams],
+)
 
   const { data: teamMembers, isLoading: membersLoading } = useQuery({
     queryKey: ['team-members', team.id],
@@ -492,6 +519,37 @@ function MembersPanel({
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const transferMemberMutation = useMutation({
+    mutationFn: async () => {
+      if (!transferMember) {
+        throw new Error('Selecione o vendedor que será transferido.')
+      }
+
+      if (!destinationTeamId) {
+        throw new Error('Selecione a equipe de destino.')
+      }
+
+      return transferSalespersonTeam({
+        organizationId: orgId,
+        organizationMemberId: transferMember.organization_member_id,
+        destinationTeamId,
+      })
+    },
+    onSuccess: (result) => {
+      toast.success(
+        `Vendedor transferido para ${result.destination_team_name}.`,
+      )
+      setTransferMember(null)
+      setDestinationTeamId('')
+      qc.invalidateQueries({ queryKey: ['team-members'] })
+      qc.invalidateQueries({ queryKey: ['available-salespersons'] })
+      qc.invalidateQueries({ queryKey: ['teams'] })
+      qc.invalidateQueries({ queryKey: ['org-stats'] })
+      qc.invalidateQueries({ queryKey: ['setup-checklist'] })
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
   const plannedCapacity = getPlannedSalespersonCapacity(team.metadata)
   const activeCount = teamMembers?.length ?? 0
 
@@ -542,6 +600,106 @@ function MembersPanel({
           )}
         </div>
       )}
+            {canManage && transferMember && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">
+                Transferir vendedor
+              </p>
+              <p className="text-xs text-gray-500">
+                {getRelatedProfile(
+                  transferMember.organization_member?.profiles,
+                )?.full_name ?? 'Vendedor selecionado'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setTransferMember(null)
+                setDestinationTeamId('')
+              }}
+              disabled={transferMemberMutation.isPending}
+              className="text-xs font-medium text-gray-500 hover:text-gray-700"
+            >
+              Cancelar
+            </button>
+          </div>
+
+          <label className="form-label">Equipe de destino</label>
+
+          <div className="flex gap-2">
+            <select
+              value={destinationTeamId}
+              onChange={(event) =>
+                setDestinationTeamId(event.target.value)
+              }
+              className="form-input"
+              disabled={transferMemberMutation.isPending}
+            >
+              <option value="">Selecione...</option>
+
+              {destinationTeams.map((candidate) => {
+                const capacity =
+                  getPlannedSalespersonCapacity(candidate.metadata)
+
+                const activeSalespersons = (
+                  candidate.team_members ?? []
+                ).filter(
+                  (member) =>
+                    member.status === 'active' &&
+                    !member.archived_at,
+                ).length
+
+                const isFull =
+                  capacity > 0 && activeSalespersons >= capacity
+
+                return (
+                  <option
+                    key={candidate.id}
+                    value={candidate.id}
+                    disabled={isFull}
+                  >
+                    {candidate.name}
+                    {capacity > 0
+                      ? ` — ${activeSalespersons}/${capacity}`
+                      : ''}
+                    {isFull ? ' (lotada)' : ''}
+                  </option>
+                )
+              })}
+            </select>
+
+            <button
+              type="button"
+              onClick={() => transferMemberMutation.mutate()}
+              disabled={
+                !destinationTeamId ||
+                transferMemberMutation.isPending
+              }
+              className="btn-primary shrink-0"
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+              {transferMemberMutation.isPending
+                ? 'Transferindo...'
+                : 'Transferir'}
+            </button>
+          </div>
+
+          {destinationTeams.length === 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              Nenhuma outra equipe ativa está disponível para
+              transferência.
+            </p>
+          )}
+
+          <p className="mt-2 text-xs text-gray-500">
+            O vínculo atual será encerrado e o histórico será
+            preservado.
+          </p>
+        </div>
+      )}
 
       {membersLoading ? (
         <div className="flex justify-center py-8">
@@ -574,15 +732,29 @@ function MembersPanel({
                   </p>
                 </div>
                 {canManage && (
-                  <button
-                    onClick={() =>
-                      removeMemberMutation.mutate(teamMember.id)
-                    }
-                    className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                    title="Encerrar vínculo"
-                  >
-                    <UserMinus className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTransferMember(teamMember)
+                        setDestinationTeamId('')
+                      }}
+                      className="rounded p-1.5 text-gray-400 hover:bg-brand-50 hover:text-brand-700"
+                      title="Transferir vendedor"
+                    >
+                      <ArrowRightLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeMemberMutation.mutate(teamMember.id)
+                      }
+                      className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      title="Encerrar vínculo"
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
               </li>
             )
@@ -627,8 +799,11 @@ export default function TeamsPage() {
             name
           ),
           supervisor:organization_members!teams_supervisor_org_fkey(
-            user_id,
-            profiles!organization_members_user_id_fkey(full_name)
+          user_id,
+          role,
+          status,
+          archived_at,
+          profiles!organization_members_user_id_fkey(full_name)
           ),
           team_members:team_members!team_members_team_org_fkey(
             id,
@@ -848,6 +1023,7 @@ export default function TeamsPage() {
             <MembersPanel
               team={membersTeam}
               orgId={orgId}
+              teams={orderedTeams}
               canManage={canManageTeams}
               onClose={() => setMembersTeam(undefined)}
             />
