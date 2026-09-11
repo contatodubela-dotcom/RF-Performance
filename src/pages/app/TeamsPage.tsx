@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect,useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -162,9 +162,10 @@ function TeamForm({
   })
 
   const {
-    register,
-    handleSubmit,
-    formState: { errors },
+   register,
+   handleSubmit,
+   reset,
+   formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(teamSchema),
     defaultValues: {
@@ -175,6 +176,18 @@ function TeamForm({
       supervisor_member_id: team?.supervisor_member_id ?? '',
     },
   })
+    useEffect(() => {
+    if (!team) return
+    if (!operations || !locations || !supervisors) return
+
+    reset({
+      name: team.name ?? '',
+      description: team.description ?? '',
+      operation_id: team.operation_id ?? '',
+      sales_location_id: team.sales_location_id ?? '',
+      supervisor_member_id: team.supervisor_member_id ?? '',
+    })
+  }, [team, operations, locations, supervisors, reset])
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
