@@ -1,4 +1,5 @@
 import type { ElementType } from 'react'
+import PwaInstallPrompt from '@/components/pwa/PwaInstallPrompt'
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, useNavigate } from 'react-router-dom'
@@ -382,7 +383,9 @@ export default function Sidebar({
               </div>
             )
           })}
-        </nav>
+         </nav>
+
+        <PwaInstallPrompt variant="sidebar" />
 
         {/* Perfil do usuário */}
         <div className="border-t border-brand-800 px-4 py-4">
