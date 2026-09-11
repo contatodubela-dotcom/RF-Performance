@@ -7,6 +7,7 @@ import { BarChart2, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { ROUTES } from '@/constants/routes'
 import { toast } from 'sonner'
+import PwaInstallPrompt from '@/components/pwa/PwaInstallPrompt'
 
 const schema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -102,7 +103,9 @@ export default function LoginPage() {
             <button type="submit" disabled={loading} className="btn-primary w-full mt-2 py-2.5">
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
-          </form>
+           </form>
+
+          <PwaInstallPrompt />
 
           <p className="mt-6 text-center text-xs text-gray-400">
             O acesso é concedido apenas por convite administrativo.
