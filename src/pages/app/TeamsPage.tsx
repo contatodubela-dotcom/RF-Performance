@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect,useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -27,6 +27,10 @@ import {
 } from '@/lib/setupMetadata'
 import type { OrgRole, Team, TeamMember } from '@/types/database'
 import { transferSalespersonTeam } from '@/services/teamTransferService'
+import {
+  changeTeamSupervisor,
+  TeamSupervisorServiceError,
+} from '@/services/teamSupervisorService'
 import PageHeader from '@/components/shared/PageHeader'
 import StatusBadge from '@/components/shared/StatusBadge'
 import EmptyState from '@/components/shared/EmptyState'
@@ -158,9 +162,10 @@ function TeamForm({
   })
 
   const {
-    register,
-    handleSubmit,
-    formState: { errors },
+   register,
+   handleSubmit,
+   reset,
+   formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(teamSchema),
     defaultValues: {
@@ -171,6 +176,18 @@ function TeamForm({
       supervisor_member_id: team?.supervisor_member_id ?? '',
     },
   })
+    useEffect(() => {
+    if (!team) return
+    if (!operations || !locations || !supervisors) return
+
+    reset({
+      name: team.name ?? '',
+      description: team.description ?? '',
+      operation_id: team.operation_id ?? '',
+      sales_location_id: team.sales_location_id ?? '',
+      supervisor_member_id: team.supervisor_member_id ?? '',
+    })
+  }, [team, operations, locations, supervisors, reset])
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -187,11 +204,10 @@ function TeamForm({
         )
       }
 
-      const payload = {
+      const basePayload = {
         organization_id: orgId,
         operation_id: data.operation_id,
         sales_location_id: data.sales_location_id || null,
-        supervisor_member_id: data.supervisor_member_id || null,
         name: data.name,
         description: data.description || null,
         metadata: updateSetupMetadata(team?.metadata, {
@@ -205,23 +221,47 @@ function TeamForm({
       }
 
       if (team) {
+        const supervisorChanged =
+          (team.supervisor_member_id ?? '') !==
+          data.supervisor_member_id
+
+        if (supervisorChanged && !data.supervisor_member_id) {
+          throw new Error(
+            'Para trocar o supervisor, selecione um novo supervisor ativo.',
+          )
+        }
+
         const { error } = await supabase
           .from('teams')
-          .update(payload)
+          .update(basePayload)
           .eq('id', team.id)
 
         if (error) throw error
-      } else {
-        const { error } = await supabase.from('teams').insert({
-          ...payload,
-          source_system: 'rf_performance',
-          created_by: profile?.id,
-        })
 
-        if (error) throw error
+        if (supervisorChanged) {
+          return changeTeamSupervisor({
+            organizationId: orgId,
+            teamId: team.id,
+            newSupervisorMemberId: data.supervisor_member_id,
+          })
+        }
+
+        return null
       }
+
+      const { error } = await supabase.from('teams').insert({
+        ...basePayload,
+        supervisor_member_id: data.supervisor_member_id || null,
+        source_system: 'rf_performance',
+        created_by: profile?.id,
+      })
+
+      if (error) throw error
+
+      return null
     },
-    onSuccess: () => {
+
+    onSuccess: (supervisorChange) => {
       toast.success(
         team
           ? confirmData
@@ -229,12 +269,36 @@ function TeamForm({
             : 'Equipe atualizada como estrutura provisória.'
           : 'Equipe criada.',
       )
+
+      if (
+        supervisorChange?.supervisor_already_manages_other_teams
+      ) {
+        const otherTeams =
+          supervisorChange.other_active_team_count
+
+        toast.warning(
+          `Supervisor alterado com sucesso. O novo supervisor já responde por ${
+            otherTeams === 1
+              ? 'outra equipe.'
+              : `${otherTeams} outras equipes.`
+          }`,
+        )
+      }
+
       qc.invalidateQueries({ queryKey: ['teams'] })
       qc.invalidateQueries({ queryKey: ['org-stats'] })
       qc.invalidateQueries({ queryKey: ['setup-checklist'] })
       onClose()
     },
-    onError: (error: Error) => toast.error(error.message),
+
+    onError: (error: Error) => {
+      if (error instanceof TeamSupervisorServiceError) {
+        toast.error(error.message)
+        return
+      }
+
+      toast.error(error.message)
+    },
   })
 
   return (
