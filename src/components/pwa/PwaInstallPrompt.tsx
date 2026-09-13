@@ -193,9 +193,11 @@ export default function PwaInstallPrompt({
             </>
           ) : isAndroid ? (
             <>
-              Abra o menu <strong>⋮</strong> do navegador e escolha{' '}
+              Abra o menu <strong>⋮</strong> do navegador e toque em{' '}
+              <strong>Instalar e criar atalho</strong>,{' '}
               <strong>Instalar app</strong> ou{' '}
-              <strong>Adicionar à tela inicial</strong>.
+              <strong>Adicionar à tela inicial</strong>, conforme a
+              opção exibida no seu navegador.
             </>
           ) : (
             <>
