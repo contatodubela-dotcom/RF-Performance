@@ -9,20 +9,22 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
-import { useCommercialPlanReference } from '@/hooks/useCommercialPlan'
-import type { TrainingModule, TrainingStatus } from '@/types/commercialPlan'
-import { TRAINING_STATUS_LABELS } from '@/lib/commercialPlan'
-import PageHeader from '@/components/shared/PageHeader'
-import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import EmptyState from '@/components/shared/EmptyState'
+import LoadingSpinner from '@/components/shared/LoadingSpinner'
+import PageHeader from '@/components/shared/PageHeader'
+import TrainingLibraryPanel from '@/components/training/TrainingLibraryPanel'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useAuth } from '@/contexts/AuthContext'
+import { useCommercialPlanReference } from '@/hooks/useCommercialPlan'
+import { TRAINING_STATUS_LABELS } from '@/lib/commercialPlan'
+import { supabase } from '@/lib/supabase'
+import { getTrainingLibrary } from '@/services/trainingLibraryService'
+import type { TrainingModule, TrainingStatus } from '@/types/commercialPlan'
 
 function TrainingEditor({
   module,
@@ -139,10 +141,11 @@ function TrainingEditor({
       </div>
 
       <div className="flex justify-end gap-2">
-        <button className="btn-secondary" onClick={onClose}>
+        <button type="button" className="btn-secondary" onClick={onClose}>
           Cancelar
         </button>
         <button
+          type="button"
           className="btn-primary"
           onClick={() => mutation.mutate()}
           disabled={mutation.isPending}
@@ -161,7 +164,7 @@ export default function TrainingPage() {
   const [editing, setEditing] = useState<TrainingModule | null>(null)
   const { data: plan } = useCommercialPlanReference(orgId)
 
-  const { data: modules, isLoading } = useQuery({
+  const { data: modules = [], isLoading: isModulesLoading } = useQuery({
     queryKey: ['training-modules', plan?.id, user?.id],
     enabled: !!plan?.id && !!user?.id,
     queryFn: async () => {
@@ -177,21 +180,17 @@ export default function TrainingPage() {
     },
   })
 
-  if (isLoading) {
-    return (
-      <div className="page-container flex min-h-[400px] items-center justify-center">
-        <LoadingSpinner size="lg" />
-      </div>
-    )
-  }
-
-  if (!modules?.length) {
-    return (
-      <div className="page-container">
-        <EmptyState icon={BookOpen} title="Nenhum treinamento cadastrado" />
-      </div>
-    )
-  }
+  const {
+    data: library = [],
+    isLoading: isLibraryLoading,
+    isFetching: isLibraryFetching,
+    error: libraryError,
+    refetch: refetchLibrary,
+  } = useQuery({
+    queryKey: ['training-library', orgId, user?.id],
+    enabled: !!orgId && !!user?.id,
+    queryFn: () => getTrainingLibrary(orgId!),
+  })
 
   const completed = modules.filter(
     (module) => module.status === 'completed',
@@ -201,93 +200,147 @@ export default function TrainingPage() {
     <div className="page-container">
       <PageHeader
         title="Treinamentos"
-        description="Trilha aplicada: explicação, demonstração, simulação e atendimento real observado."
+        description="Acesse materiais de desenvolvimento e acompanhe a trilha prática do programa comercial."
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="card p-4">
-          <BookOpen className="mb-2 h-5 w-5 text-brand-700" />
-          <p className="text-2xl font-bold text-gray-900">{modules.length}</p>
-          <p className="text-sm text-gray-500">módulos do programa</p>
-        </div>
-
-        <div className="card p-4">
-          <Award className="mb-2 h-5 w-5 text-amber-600" />
-          <p className="text-2xl font-bold text-gray-900">80%</p>
-          <p className="text-sm text-gray-500">nota mínima recomendada</p>
-        </div>
-
-        <div className="card p-4">
-          <CalendarDays className="mb-2 h-5 w-5 text-green-600" />
-          <p className="text-2xl font-bold text-gray-900">
-            {completed}/{modules.length}
+      <section className="mb-8">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Biblioteca de treinamentos
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Materiais de estudo e desenvolvimento disponíveis para o seu perfil.
           </p>
-          <p className="text-sm text-gray-500">módulos concluídos</p>
         </div>
-      </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {modules.map((module) => (
-          <article key={module.id} className="card p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">
-                  {module.sequence_no}
-                </div>
-                <div>
-                  <h2 className="font-semibold text-gray-900">
-                    {module.title}
-                  </h2>
-                  <p className="mt-1 text-sm leading-5 text-gray-600">
-                    {module.objective}
-                  </p>
-                </div>
+        <TrainingLibraryPanel
+          rows={library}
+          isLoading={isLibraryLoading}
+          isFetching={isLibraryFetching}
+          error={libraryError}
+          onRetry={() => {
+            void refetchLibrary()
+          }}
+        />
+      </section>
+
+      <section>
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Trilha operacional
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Explicação, demonstração, simulação e atendimento real observado.
+          </p>
+        </div>
+
+        {isModulesLoading ? (
+          <div className="card flex min-h-[180px] items-center justify-center">
+            <LoadingSpinner message="Carregando trilha de treinamentos..." />
+          </div>
+        ) : !modules.length ? (
+          <div className="card">
+            <EmptyState
+              icon={BookOpen}
+              title="Nenhum módulo da trilha cadastrado"
+              description="Os módulos operacionais do programa comercial aparecerão aqui quando estiverem disponíveis."
+            />
+          </div>
+        ) : (
+          <>
+            <div className="mb-6 grid gap-4 sm:grid-cols-3">
+              <div className="card p-4">
+                <BookOpen className="mb-2 h-5 w-5 text-brand-700" />
+                <p className="text-2xl font-bold text-gray-900">
+                  {modules.length}
+                </p>
+                <p className="text-sm text-gray-500">módulos do programa</p>
               </div>
 
-              {canManage && (
-                <button
-                  className="rounded p-1.5 text-gray-400 hover:bg-gray-100"
-                  onClick={() => setEditing(module)}
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2 text-xs">
-              <span className="badge bg-gray-100 text-gray-700">
-                <Clock3 className="mr-1 h-3 w-3" />
-                {module.duration_minutes} min
-              </span>
-              <span
-                className={`badge ${
-                  module.status === 'completed'
-                    ? 'badge-active'
-                    : 'badge-inactive'
-                }`}
-              >
-                {TRAINING_STATUS_LABELS[module.status]}
-              </span>
-              {module.scheduled_date && (
-                <span className="badge bg-blue-100 text-blue-800">
-                  {new Date(
-                    `${module.scheduled_date}T12:00:00`,
-                  ).toLocaleDateString('pt-BR')}
-                </span>
-              )}
-            </div>
-
-            {module.critical_error && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 p-3">
-                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-                <p className="text-xs text-red-800">
-                  <strong>Erro crítico:</strong> {module.critical_error}
+              <div className="card p-4">
+                <Award className="mb-2 h-5 w-5 text-amber-600" />
+                <p className="text-2xl font-bold text-gray-900">80%</p>
+                <p className="text-sm text-gray-500">
+                  nota mínima recomendada
                 </p>
               </div>
-            )}
-          </article>
-        ))}
-      </div>
+
+              <div className="card p-4">
+                <CalendarDays className="mb-2 h-5 w-5 text-green-600" />
+                <p className="text-2xl font-bold text-gray-900">
+                  {completed}/{modules.length}
+                </p>
+                <p className="text-sm text-gray-500">módulos concluídos</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              {modules.map((module) => (
+                <article key={module.id} className="card p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-800">
+                        {module.sequence_no}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {module.title}
+                        </h3>
+                        <p className="mt-1 text-sm leading-5 text-gray-600">
+                          {module.objective}
+                        </p>
+                      </div>
+                    </div>
+
+                    {canManage && (
+                      <button
+                        type="button"
+                        className="rounded p-1.5 text-gray-400 hover:bg-gray-100"
+                        onClick={() => setEditing(module)}
+                        aria-label={`Editar ${module.title}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                    <span className="badge bg-gray-100 text-gray-700">
+                      <Clock3 className="mr-1 h-3 w-3" />
+                      {module.duration_minutes} min
+                    </span>
+                    <span
+                      className={`badge ${
+                        module.status === 'completed'
+                          ? 'badge-active'
+                          : 'badge-inactive'
+                      }`}
+                    >
+                      {TRAINING_STATUS_LABELS[module.status]}
+                    </span>
+                    {module.scheduled_date && (
+                      <span className="badge bg-blue-100 text-blue-800">
+                        {new Date(
+                          `${module.scheduled_date}T12:00:00`,
+                        ).toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
+                  </div>
+
+                  {module.critical_error && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 p-3">
+                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                      <p className="text-xs text-red-800">
+                        <strong>Erro crítico:</strong> {module.critical_error}
+                      </p>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
 
       <Dialog
         open={!!editing}
