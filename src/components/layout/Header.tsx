@@ -34,11 +34,18 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const location = useLocation()
 
   const segments = location.pathname.split('/').filter(Boolean)
-  const breadcrumbs = segments.map((seg, i) => ({
-    label: BREADCRUMB_LABELS[seg] ?? seg,
-    path: '/' + segments.slice(0, i + 1).join('/'),
-    isLast: i === segments.length - 1,
-  }))
+  const breadcrumbs = segments.map((seg, i) => {
+    const previousSegment = segments[i - 1]
+    const isTrainingDetail =
+      previousSegment === 'treinamentos' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(seg)
+
+    return {
+      label: isTrainingDetail ? 'Treinamento' : (BREADCRUMB_LABELS[seg] ?? seg),
+      path: '/' + segments.slice(0, i + 1).join('/'),
+      isLast: i === segments.length - 1,
+    }
+  })
 
   const displayName = profile?.preferred_name || profile?.full_name || '—'
   const roleLabel = currentRole ? (ROLE_LABELS[currentRole] ?? '') : ''
