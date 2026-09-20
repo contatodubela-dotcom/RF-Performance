@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Circle,
   Clock3,
+  Download,
   ExternalLink,
   FileText,
   Loader2,
@@ -305,6 +306,13 @@ function lessonStatusLabel(lesson: TrainingLibraryLessonWithProgress) {
   if (lesson.progress?.status === 'completed') return 'Concluída'
   if (lesson.progress?.status === 'in_progress') return 'Em andamento'
   return 'Não iniciada'
+}
+
+function canPreviewAssetInBrowser(asset: TrainingLibraryAsset) {
+  return (
+    asset.mime_type === 'application/pdf' ||
+    asset.mime_type.startsWith('image/')
+  )
 }
 
 export default function TrainingCoursePage() {
@@ -663,12 +671,13 @@ export default function TrainingCoursePage() {
             <section className="card p-5">
               <h2 className="font-semibold text-gray-900">Materiais de apoio</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Consulte os arquivos complementares deste treinamento.
+                Abra ou baixe os arquivos complementares deste treinamento.
               </p>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {assets.map((asset) => {
                   const opening = openingAssetId === asset.id
+                  const previewable = canPreviewAssetInBrowser(asset)
 
                   return (
                     <button
@@ -680,15 +689,22 @@ export default function TrainingCoursePage() {
                     >
                       <span className="flex min-w-0 items-center gap-3">
                         <FileText className="h-4 w-4 shrink-0 text-gray-500" />
-                        <span className="truncate text-sm font-medium text-gray-800">
-                          {asset.display_name}
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-gray-800">
+                            {asset.display_name}
+                          </span>
+                          <span className="block text-xs text-gray-500">
+                            {previewable ? 'Abrir material' : 'Baixar material'}
+                          </span>
                         </span>
                       </span>
 
                       {opening ? (
                         <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-brand-700" />
-                      ) : (
+                      ) : previewable ? (
                         <ExternalLink className="h-4 w-4 shrink-0 text-gray-400" />
+                      ) : (
+                        <Download className="h-4 w-4 shrink-0 text-gray-400" />
                       )}
                     </button>
                   )
