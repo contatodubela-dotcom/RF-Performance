@@ -1,14 +1,18 @@
 import { useState } from 'react'
 import {
+  ArrowRight,
   BookOpen,
+  Clock3,
   ExternalLink,
   FileText,
   RefreshCw,
   Star,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
+import { ROUTES } from '@/constants/routes'
 import { createTrainingAssetSignedUrl } from '@/services/trainingLibraryService'
 import type {
   TrainingLibraryAsset,
@@ -32,6 +36,14 @@ const ASSET_TYPE_LABELS: Record<TrainingLibraryAsset['asset_type'], string> = {
   cover: 'Capa',
 }
 
+function metadataNumber(
+  metadata: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = metadata[key]
+  return typeof value === 'number' ? value : null
+}
+
 export default function TrainingLibraryPanel({
   rows,
   isLoading,
@@ -45,6 +57,7 @@ export default function TrainingLibraryPanel({
   error: unknown
   onRetry: () => void
 }) {
+  const navigate = useNavigate()
   const [openingAssetId, setOpeningAssetId] = useState<string | null>(null)
 
   async function handleOpenAsset(asset: TrainingLibraryAsset) {
@@ -128,6 +141,14 @@ export default function TrainingLibraryPanel({
         const availableAssets = training.assets.filter(
           (asset) => asset.asset_type !== 'cover',
         )
+        const hasLearningExperience =
+          training.metadata.learning_experience === true
+        const moduleCount = metadataNumber(training.metadata, 'module_count')
+        const lessonCount = metadataNumber(training.metadata, 'lesson_count')
+        const duration = metadataNumber(
+          training.metadata,
+          'estimated_duration_minutes',
+        )
 
         return (
           <article
@@ -164,12 +185,48 @@ export default function TrainingLibraryPanel({
                     {training.description}
                   </p>
                 )}
+
+                {hasLearningExperience && (
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
+                    {moduleCount !== null && (
+                      <span className="badge bg-gray-100 text-gray-700">
+                        {moduleCount} módulos
+                      </span>
+                    )}
+                    {lessonCount !== null && (
+                      <span className="badge bg-gray-100 text-gray-700">
+                        {lessonCount} aulas
+                      </span>
+                    )}
+                    {duration !== null && (
+                      <span className="badge bg-gray-100 text-gray-700">
+                        <Clock3 className="mr-1 h-3 w-3" />
+                        {duration} min
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
                 <BookOpen className="h-5 w-5" />
               </div>
             </div>
+
+            {hasLearningExperience && (
+              <div className="mt-5">
+                <button
+                  type="button"
+                  className="btn-primary w-full justify-center"
+                  onClick={() =>
+                    navigate(`${ROUTES.TRAINING}/${training.id}`)
+                  }
+                >
+                  Acessar treinamento
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </button>
+              </div>
+            )}
 
             <div className="mt-5 border-t border-gray-100 pt-4">
               {availableAssets.length ? (

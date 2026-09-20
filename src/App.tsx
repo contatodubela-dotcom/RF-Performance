@@ -35,6 +35,7 @@ import ResultsPage from '@/pages/app/ResultsPage'
 import SalesLocationsPage from '@/pages/app/SalesLocationsPage'
 import SettingsPage from '@/pages/app/SettingsPage'
 import TeamsPage from '@/pages/app/TeamsPage'
+import TrainingCoursePage from '@/pages/app/TrainingCoursePage'
 import TrainingPage from '@/pages/app/TrainingPage'
 import UsersPage from '@/pages/app/UsersPage'
 import NotFoundPage from '@/pages/NotFoundPage'
@@ -143,6 +144,14 @@ export default function App() {
                 element={authorized(
                   ROUTES.TRAINING,
                   <TrainingPage />,
+                )}
+              />
+
+              <Route
+                path={`${ROUTES.TRAINING}/:trainingId`}
+                element={authorized(
+                  ROUTES.TRAINING,
+                  <TrainingCoursePage />,
                 )}
               />
 
