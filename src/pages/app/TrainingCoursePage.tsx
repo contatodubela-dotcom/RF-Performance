@@ -34,6 +34,14 @@ import type {
 } from '@/types/trainingLibrary'
 
 type Metadata = Record<string, unknown>
+type ContentSectionVariant = 'default' | 'highlight' | 'practice' | 'warning'
+
+interface ContentSection {
+  title: string
+  body: string | null
+  items: string[]
+  variant: ContentSectionVariant
+}
 
 function metadataString(metadata: Metadata, key: string) {
   const value = metadata[key]
@@ -69,6 +77,40 @@ function objectString(item: Record<string, unknown>, key: string) {
 function objectNumber(item: Record<string, unknown>, key: string) {
   const value = item[key]
   return typeof value === 'number' ? value : null
+}
+
+function metadataContentSections(metadata: Metadata): ContentSection[] {
+  const value = metadata.content_sections
+
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+
+    const record = item as Record<string, unknown>
+    const title = objectString(record, 'title').trim()
+    const bodyValue = record.body
+    const body =
+      typeof bodyValue === 'string' && bodyValue.trim() ? bodyValue.trim() : null
+    const itemsValue = record.items
+    const items = Array.isArray(itemsValue)
+      ? itemsValue.filter(
+          (entry): entry is string =>
+            typeof entry === 'string' && entry.trim().length > 0,
+        )
+      : []
+    const variantValue = objectString(record, 'variant')
+    const variant: ContentSectionVariant =
+      variantValue === 'highlight' ||
+      variantValue === 'practice' ||
+      variantValue === 'warning'
+        ? variantValue
+        : 'default'
+
+    if (!title && !body && !items.length) return []
+
+    return [{ title, body, items, variant }]
+  })
 }
 
 function ContentList({
@@ -119,6 +161,60 @@ function Highlight({
   )
 }
 
+function StructuredContentSections({
+  sections,
+}: {
+  sections: ContentSection[]
+}) {
+  if (!sections.length) return null
+
+  return (
+    <div className="space-y-4">
+      {sections.map((section, index) => {
+        const containerClass =
+          section.variant === 'highlight'
+            ? 'border-brand-100 bg-brand-50'
+            : section.variant === 'practice'
+              ? 'border-gray-200 bg-gray-50'
+              : section.variant === 'warning'
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-gray-200 bg-white'
+
+        return (
+          <section
+            key={`${section.title || 'section'}-${index}`}
+            className={`rounded-xl border p-4 ${containerClass}`}
+          >
+            {section.title && (
+              <h3 className="font-semibold text-gray-900">{section.title}</h3>
+            )}
+
+            {section.body && (
+              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-gray-700">
+                {section.body}
+              </p>
+            )}
+
+            {!!section.items.length && (
+              <ul className="mt-3 space-y-2">
+                {section.items.map((item, itemIndex) => (
+                  <li
+                    key={`${section.title}-${itemIndex}`}
+                    className="flex gap-3 text-sm leading-6 text-gray-700"
+                  >
+                    <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-brand-700" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
 function LessonContent({
   lesson,
 }: {
@@ -127,6 +223,7 @@ function LessonContent({
   const metadata = lesson.metadata
   const learningObjective = metadataString(metadata, 'learning_objective')
   const summary = metadataString(metadata, 'summary')
+  const contentSections = metadataContentSections(metadata)
   const customerQuestion = metadataString(metadata, 'customer_question')
   const keyPoints = metadataStringArray(metadata, 'key_points')
   const framework = metadataObjectArray(metadata, 'framework')
@@ -166,6 +263,8 @@ function LessonContent({
           <p className="mt-2 text-sm leading-6 text-gray-700">{summary}</p>
         </section>
       )}
+
+      <StructuredContentSections sections={contentSections} />
 
       <Highlight
         label="Pergunta silenciosa do cliente"
