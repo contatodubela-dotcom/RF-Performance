@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -9,6 +10,7 @@ import {
   LockKeyhole,
   PlayCircle,
   RefreshCw,
+  RotateCcw,
   UsersRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -16,8 +18,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { ROUTES } from '@/constants/routes'
 import {
   AssessmentServiceError,
+  getAssessmentExtraAttemptAdminState,
   getAvailableAssessments,
   getManagedAssessmentProgress,
+  grantAssessmentExtraAttempt,
   startAssessmentAttempt,
 } from '@/services/assessmentService'
 import {
@@ -26,10 +30,12 @@ import {
 } from '@/services/certificationService'
 import type {
   AssessmentAvailability,
+  AssessmentExtraAttemptAdminStateRow,
   AvailableAssessment,
   ManagedAssessmentProgressRow,
   ManagedAssessmentProgressStatus,
 } from '@/types/assessments'
+import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import PageHeader from '@/components/shared/PageHeader'
@@ -119,6 +125,10 @@ function ManagedAssessmentsPanel({
   error,
   onRetry,
   scopeLabel,
+  extraAttemptState,
+  canManageExtraAttempts,
+  isGrantingExtraAttempt,
+  onGrantExtraAttempt,
 }: {
   rows: ManagedAssessmentProgressRow[]
   isLoading: boolean
@@ -126,6 +136,13 @@ function ManagedAssessmentsPanel({
   error: unknown
   onRetry: () => void
   scopeLabel: string
+  extraAttemptState: AssessmentExtraAttemptAdminStateRow[]
+  canManageExtraAttempts: boolean
+  isGrantingExtraAttempt: boolean
+  onGrantExtraAttempt: (
+    row: ManagedAssessmentProgressRow,
+    state: AssessmentExtraAttemptAdminStateRow,
+  ) => void
 }) {
   if (isLoading) {
     return (
@@ -186,6 +203,13 @@ function ManagedAssessmentsPanel({
     }, new Map<string, ManagedAssessmentProgressRow[]>()),
   )
 
+  const extraAttemptStateByKey = new Map(
+    extraAttemptState.map((state) => [
+      `${state.organization_member_id}:${state.test_version_id}`,
+      state,
+    ]),
+  )
+
   return (
     <div className="space-y-4">
       {members.map(([memberId, memberRows]) => {
@@ -240,49 +264,81 @@ function ManagedAssessmentsPanel({
                     <th className="table-th">Tentativas</th>
                     <th className="table-th">Última nota</th>
                     <th className="table-th hidden lg:table-cell">Última atividade</th>
+                    {canManageExtraAttempts && (
+                      <th className="table-th">Ação</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {memberRows
                     .slice()
                     .sort((a, b) => a.sequence_no - b.sequence_no)
-                    .map((row) => (
-                      <tr
-                        key={`${row.organization_member_id}:${row.test_version_id}`}
-                        className="border-b border-gray-100 last:border-b-0"
-                      >
-                        <td className="table-td">
-                          <p className="font-medium text-gray-800">
-                            {row.sequence_no}. {row.test_title}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {row.test_purpose === 'diagnostic'
-                              ? 'Diagnóstico'
-                              : 'Avaliação de certificação'}
-                          </p>
-                        </td>
-                        <td className="table-td">
-                          <span
-                            className={`badge ${MANAGED_PROGRESS_CLASSES[row.progress_status]}`}
-                          >
-                            {MANAGED_PROGRESS_LABELS[row.progress_status]}
-                          </span>
-                        </td>
-                        <td className="table-td text-gray-600">
-                          {row.attempts_used}
-                        </td>
-                        <td className="table-td text-gray-600">
-                          {formatManagedScore(row.last_graded_overall_score)}
-                        </td>
-                        <td className="table-td hidden text-xs text-gray-500 lg:table-cell">
-                          {formatManagedDate(
-                            row.last_attempt_graded_at ??
-                              row.last_attempt_submitted_at ??
-                              row.last_attempt_started_at,
+                    .map((row) => {
+                      const extraState = extraAttemptStateByKey.get(
+                        `${row.organization_member_id}:${row.test_version_id}`,
+                      )
+
+                      return (
+                        <tr
+                          key={`${row.organization_member_id}:${row.test_version_id}`}
+                          className="border-b border-gray-100 last:border-b-0"
+                        >
+                          <td className="table-td">
+                            <p className="font-medium text-gray-800">
+                              {row.sequence_no}. {row.test_title}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {row.test_purpose === 'diagnostic'
+                                ? 'Diagnóstico'
+                                : 'Avaliação de certificação'}
+                            </p>
+                          </td>
+                          <td className="table-td">
+                            <span
+                              className={`badge ${MANAGED_PROGRESS_CLASSES[row.progress_status]}`}
+                            >
+                              {MANAGED_PROGRESS_LABELS[row.progress_status]}
+                            </span>
+                          </td>
+                          <td className="table-td text-gray-600">
+                            {canManageExtraAttempts && extraState
+                              ? `${row.attempts_used}/${extraState.effective_max_attempts}`
+                              : row.attempts_used}
+                          </td>
+                          <td className="table-td text-gray-600">
+                            {formatManagedScore(row.last_graded_overall_score)}
+                          </td>
+                          <td className="table-td hidden text-xs text-gray-500 lg:table-cell">
+                            {formatManagedDate(
+                              row.last_attempt_graded_at ??
+                                row.last_attempt_submitted_at ??
+                                row.last_attempt_started_at,
+                            )}
+                          </td>
+                          {canManageExtraAttempts && (
+                            <td className="table-td">
+                              {extraState?.extra_attempts_available ? (
+                                <span className="badge bg-blue-100 text-blue-800">
+                                  Extra liberada
+                                </span>
+                              ) : extraState?.can_grant_extra_attempt ? (
+                                <button
+                                  type="button"
+                                  className="btn-secondary whitespace-nowrap"
+                                  onClick={() => onGrantExtraAttempt(row, extraState)}
+                                  disabled={isGrantingExtraAttempt}
+                                >
+                                  <RotateCcw className="mr-2 h-4 w-4" />
+                                  Liberar nova tentativa
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </td>
                           )}
-                        </td>
-                      </tr>
-                    ))}
+                        </tr>
+                      )
+                    })}
                 </tbody>
               </table>
             </div>
@@ -372,10 +428,17 @@ function AssessmentCard({
       <div className="mt-4 border-t border-gray-100 pt-4 text-sm text-gray-600">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span>
-            Tentativas: {assessment.attempts_used}/{assessment.max_attempts}
+            Tentativas: {assessment.attempts_used}/{assessment.effective_max_attempts ?? assessment.max_attempts}
           </span>
           <span>Legislação mínima: {assessment.legal_min_score}%</span>
         </div>
+
+        {assessment.extra_attempts_available > 0 && (
+          <p className="mt-3 flex items-center gap-2 text-blue-700">
+            <RotateCcw className="h-4 w-4" />
+            Uma tentativa extraordinária foi liberada para você.
+          </p>
+        )}
 
         {assessment.availability === 'locked_prerequisite' && (
           <p className="mt-3 flex items-center gap-2 text-gray-600">
@@ -435,6 +498,10 @@ export default function EvaluationsPage() {
   const { activeOrganization, user, isAdmin, isDirector, isSupervisor } = useAuth()
   const organizationId = activeOrganization?.id
   const navigate = useNavigate()
+  const [extraAttemptTarget, setExtraAttemptTarget] = useState<{
+    row: ManagedAssessmentProgressRow
+    state: AssessmentExtraAttemptAdminStateRow
+  } | null>(null)
 
   const {
     data,
@@ -464,6 +531,17 @@ export default function EvaluationsPage() {
   })
 
   const {
+    data: extraAttemptState = [],
+    error: extraAttemptStateError,
+    isFetching: extraAttemptStateIsFetching,
+    refetch: refetchExtraAttemptState,
+  } = useQuery({
+    queryKey: ['assessment-extra-attempt-admin-state', organizationId, user?.id],
+    enabled: !!organizationId && !!user?.id && isAdmin,
+    queryFn: () => getAssessmentExtraAttemptAdminState(organizationId!),
+  })
+
+  const {
     data: myCertifications = [],
     error: myCertificationsError,
     isLoading: myCertificationsIsLoading,
@@ -489,6 +567,42 @@ export default function EvaluationsPage() {
       (isAdmin || isSupervisor || isDirector),
     queryFn: () => getManagedCertifications(organizationId!),
   })
+  const grantExtraAttemptMutation = useMutation({
+    mutationFn: ({
+      row,
+    }: {
+      row: ManagedAssessmentProgressRow
+      state: AssessmentExtraAttemptAdminStateRow
+    }) => {
+      if (!organizationId) {
+        throw new Error('Organização ativa não encontrada.')
+      }
+
+      return grantAssessmentExtraAttempt({
+        organizationId,
+        organizationMemberId: row.organization_member_id,
+        testId: row.test_id,
+        reason: 'Liberação administrativa pela tela de gestão de avaliações.',
+      })
+    },
+    onSuccess: async (_result, target) => {
+      toast.success(`Nova tentativa liberada para ${target.row.member_name}.`)
+      setExtraAttemptTarget(null)
+      await Promise.all([
+        refetchManaged(),
+        refetchExtraAttemptState(),
+      ])
+    },
+    onError: (mutationError: Error) => {
+      const message =
+        mutationError instanceof AssessmentServiceError
+          ? mutationError.message
+          : 'Não foi possível liberar uma nova tentativa.'
+
+      toast.error(message)
+    },
+  })
+
   const startMutation = useMutation({
     mutationFn: (assessment: AvailableAssessment) => {
       if (!organizationId) {
@@ -713,6 +827,27 @@ export default function EvaluationsPage() {
               </p>
             </div>
 
+            {isAdmin && extraAttemptStateError && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p>
+                    Não foi possível carregar o controle de tentativas extraordinárias.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => refetchExtraAttemptState()}
+                    disabled={extraAttemptStateIsFetching}
+                  >
+                    <RefreshCw
+                      className={`mr-2 h-4 w-4 ${extraAttemptStateIsFetching ? 'animate-spin' : ''}`}
+                    />
+                    Tentar novamente
+                  </button>
+                </div>
+              </div>
+            )}
+
             <ManagedAssessmentsPanel
               rows={managedRows}
               isLoading={managedIsLoading}
@@ -721,6 +856,12 @@ export default function EvaluationsPage() {
               onRetry={() => refetchManaged()}
               scopeLabel={
                 isSupervisor ? 'suas equipes' : 'esta organização'
+              }
+              extraAttemptState={extraAttemptState}
+              canManageExtraAttempts={isAdmin && !extraAttemptStateError}
+              isGrantingExtraAttempt={grantExtraAttemptMutation.isPending}
+              onGrantExtraAttempt={(row, state) =>
+                setExtraAttemptTarget({ row, state })
               }
             />
           </section>
@@ -801,6 +942,35 @@ export default function EvaluationsPage() {
           </section>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(extraAttemptTarget)}
+        title="Liberar nova tentativa?"
+        description={
+          extraAttemptTarget
+            ? `Você está liberando uma nova tentativa para ${extraAttemptTarget.row.member_name} em “${extraAttemptTarget.row.test_title}”. A liberação cria somente um crédito adicional e preserva todo o histórico anterior.${
+                extraAttemptTarget.state.historical_review_eligible
+                  ? ' Atenção: pelas regras anteriores, o gabarito desta reprovação podia ter ficado disponível ao participante.'
+                  : ''
+              }`
+            : ''
+        }
+        confirmLabel={
+          grantExtraAttemptMutation.isPending
+            ? 'Liberando...'
+            : 'Liberar tentativa'
+        }
+        onConfirm={() => {
+          if (extraAttemptTarget && !grantExtraAttemptMutation.isPending) {
+            grantExtraAttemptMutation.mutate(extraAttemptTarget)
+          }
+        }}
+        onCancel={() => {
+          if (!grantExtraAttemptMutation.isPending) {
+            setExtraAttemptTarget(null)
+          }
+        }}
+      />
     </div>
   )
 }

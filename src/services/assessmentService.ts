@@ -3,10 +3,13 @@ import type {
   AssessmentAccessAdminState,
   AssessmentAttempt,
   AssessmentAttemptResult,
+  AssessmentExtraAttemptAdminStateRow,
   AssessmentOptionCode,
   AvailableAssessmentsResponse,
   ConfigureAssessmentAccessInput,
   ConfigureAssessmentAccessResponse,
+  GrantAssessmentExtraAttemptInput,
+  GrantAssessmentExtraAttemptResponse,
   ManagedAssessmentProgressRow,
   ManagedPracticalAssessmentRequirement,
   RecordPracticalAssessmentInput,
@@ -40,6 +43,12 @@ export type AssessmentErrorCode =
   | 'ASSESSMENT_MEMBER_REQUIRED'
   | 'ASSESSMENT_MEMBER_NOT_ALLOWED_FOR_ORGANIZATION_SCOPE'
   | 'ASSESSMENT_PARTICIPANT_NOT_ELIGIBLE'
+  | 'ASSESSMENT_ACCESS_NOT_GRANTED'
+  | 'ASSESSMENT_EXTRA_ATTEMPT_MANAGEMENT_FORBIDDEN'
+  | 'ASSESSMENT_EXTRA_ATTEMPT_ACTIVE_ATTEMPT_EXISTS'
+  | 'ASSESSMENT_EXTRA_ATTEMPT_NOT_REQUIRED'
+  | 'ASSESSMENT_ALREADY_PASSED'
+  | 'ASSESSMENT_EXTRA_ATTEMPT_CONSUME_FAILED'
   | 'PRACTICAL_ASSESSMENT_ORGANIZATION_REQUIRED'
   | 'PRACTICAL_ASSESSMENT_MEMBER_REQUIRED'
   | 'PRACTICAL_ASSESSMENT_MANAGEMENT_FORBIDDEN'
@@ -101,6 +110,18 @@ const ERROR_MESSAGES: Record<AssessmentErrorCode, string> = {
     'A liberação para a organização não pode indicar um participante específico.',
   ASSESSMENT_PARTICIPANT_NOT_ELIGIBLE:
     'O usuário selecionado não está elegível para participar das avaliações.',
+  ASSESSMENT_ACCESS_NOT_GRANTED:
+    'Esta avaliação não está liberada para o participante selecionado.',
+  ASSESSMENT_EXTRA_ATTEMPT_MANAGEMENT_FORBIDDEN:
+    'Seu perfil não possui permissão para liberar tentativas extraordinárias.',
+  ASSESSMENT_EXTRA_ATTEMPT_ACTIVE_ATTEMPT_EXISTS:
+    'O participante possui uma tentativa em andamento ou aguardando correção.',
+  ASSESSMENT_EXTRA_ATTEMPT_NOT_REQUIRED:
+    'O participante ainda possui tentativa normal disponível nesta avaliação.',
+  ASSESSMENT_ALREADY_PASSED:
+    'O participante já foi aprovado nesta avaliação.',
+  ASSESSMENT_EXTRA_ATTEMPT_CONSUME_FAILED:
+    'Não foi possível consumir com segurança a tentativa extraordinária.',
   PRACTICAL_ASSESSMENT_ORGANIZATION_REQUIRED:
     'Selecione uma organização para registrar a avaliação prática.',
   PRACTICAL_ASSESSMENT_MEMBER_REQUIRED:
@@ -327,6 +348,45 @@ export async function configureAssessmentAccess({
   )
 }
 
+export async function getAssessmentExtraAttemptAdminState(
+  organizationId: string,
+): Promise<AssessmentExtraAttemptAdminStateRow[]> {
+  const { data, error } = await supabase.rpc(
+    'get_assessment_extra_attempt_admin_state',
+    {
+      p_organization_id: organizationId,
+    },
+  )
+
+  if (error) throw mapRpcError(error)
+
+  return (data ?? []) as AssessmentExtraAttemptAdminStateRow[]
+}
+
+export async function grantAssessmentExtraAttempt({
+  organizationId,
+  organizationMemberId,
+  testId,
+  reason = null,
+}: GrantAssessmentExtraAttemptInput): Promise<GrantAssessmentExtraAttemptResponse> {
+  const { data, error } = await supabase.rpc(
+    'grant_assessment_extra_attempt',
+    {
+      p_organization_id: organizationId,
+      p_organization_member_id: organizationMemberId,
+      p_test_id: testId,
+      p_reason: reason,
+    },
+  )
+
+  if (error) throw mapRpcError(error)
+
+  return requireRpcData<GrantAssessmentExtraAttemptResponse>(
+    data,
+    'grant_assessment_extra_attempt',
+  )
+}
+
 export async function getManagedPracticalAssessmentRequirements(
   organizationId: string,
   organizationMemberId: string,
@@ -370,4 +430,3 @@ export async function recordPracticalAssessment({
     'record_practical_assessment',
   )
 }
-
