@@ -36,6 +36,7 @@ import SalesLocationsPage from '@/pages/app/SalesLocationsPage'
 import SettingsPage from '@/pages/app/SettingsPage'
 import TeamsPage from '@/pages/app/TeamsPage'
 import TrainingCoursePage from '@/pages/app/TrainingCoursePage'
+import TrainingLibraryAdminPage from '@/pages/app/TrainingLibraryAdminPage'
 import TrainingPage from '@/pages/app/TrainingPage'
 import UsersPage from '@/pages/app/UsersPage'
 import NotFoundPage from '@/pages/NotFoundPage'
@@ -238,6 +239,14 @@ export default function App() {
                 element={authorized(
                   ROUTES.USERS,
                   <UsersPage />,
+                )}
+              />
+
+              <Route
+                path={ROUTES.TRAINING_ADMIN}
+                element={authorized(
+                  ROUTES.TRAINING_ADMIN,
+                  <TrainingLibraryAdminPage />,
                 )}
               />
 
