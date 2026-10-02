@@ -15,7 +15,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import { ROUTES } from '@/constants/routes'
 import {
   canPreviewTrainingAssetInBrowser,
-  createTrainingAssetSignedUrl,
+  openTrainingAsset,
 } from '@/services/trainingLibraryService'
 import type {
   TrainingLibraryAsset,
@@ -67,21 +67,7 @@ export default function TrainingLibraryPanel({
     setOpeningAssetId(asset.id)
 
     try {
-      const previewable = canPreviewTrainingAssetInBrowser(asset)
-
-      if (!previewable && !asset.is_downloadable) {
-        throw new Error('O download deste material não está permitido.')
-      }
-
-      const signedUrl = await createTrainingAssetSignedUrl(asset, {
-        download: !previewable,
-      })
-
-      window.open(
-        signedUrl,
-        '_blank',
-        'noopener,noreferrer',
-      )
+      await openTrainingAsset(asset)
     } catch (openError) {
       const message =
         openError instanceof Error
