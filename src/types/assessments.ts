@@ -157,6 +157,10 @@ export interface AvailableAssessment {
   question_count: number
   time_limit_minutes: number | null
   max_attempts: number
+  base_max_attempts: number
+  extra_attempts_available: number
+  extra_attempts_granted_total: number
+  effective_max_attempts: number
   cooldown_hours: number
   version_id: string
   version_code: string
@@ -349,4 +353,52 @@ export interface ConfigureAssessmentAccessResponse {
   enabled: boolean
   grant_id?: string
   affected: number
+}
+
+export interface AssessmentExtraAttemptAdminStateRow {
+  organization_member_id: string
+  test_id: string
+  test_version_id: string
+
+  base_max_attempts: number
+  attempts_used: number
+
+  extra_attempts_available: number
+  extra_attempts_granted_total: number
+  effective_max_attempts: number
+
+  active_grant_id: string | null
+  active_grant_created_at: string | null
+  active_grant_reason: string | null
+
+  blocking_attempt_exists: boolean
+  passed_in_version: boolean
+
+  last_graded_attempt_id: string | null
+  last_graded_attempt_no: number | null
+  last_graded_passed: boolean | null
+
+  historical_review_eligible: boolean
+  can_grant_extra_attempt: boolean
+}
+
+export interface GrantAssessmentExtraAttemptInput {
+  organizationId: string
+  organizationMemberId: string
+  testId: string
+  reason?: string | null
+}
+
+export interface GrantAssessmentExtraAttemptResponse {
+  granted: boolean
+  grant_id: string
+  affected: number
+  organization_id: string
+  organization_member_id: string
+  test_id: string
+  test_version_id: string
+  attempts_used: number
+  base_max_attempts: number
+  extra_attempts_available: number
+  prior_review_available: boolean
 }

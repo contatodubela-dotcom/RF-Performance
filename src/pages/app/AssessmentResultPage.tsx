@@ -366,7 +366,7 @@ export default function AssessmentResultPage() {
               description={
                 result.test_purpose === 'diagnostic'
                   ? 'A revisão ainda não está disponível para esta tentativa.'
-                  : 'Nas certificações, o gabarito é liberado somente após aprovação ou após a última tentativa permitida.'
+                  : 'Nas certificações, o gabarito detalhado é liberado somente após aprovação.'
               }
             />
           </div>
