@@ -93,6 +93,52 @@ export async function createTrainingAssetSignedUrl(
   return data.signedUrl
 }
 
+export async function openTrainingAsset(
+  asset: TrainingLibraryAsset,
+): Promise<void> {
+  const previewable = canPreviewTrainingAssetInBrowser(asset)
+
+  if (!previewable && !asset.is_downloadable) {
+    throw new Error('O download deste material não está permitido.')
+  }
+
+  // Para pré-visualização, a aba precisa ser aberta durante o clique do usuário.
+  // Abrir somente depois de aguardar a URL assinada faz Chrome/Edge tratarem
+  // a ação como popup assíncrono e bloquearem a nova aba.
+  const previewWindow = previewable
+    ? window.open('', '_blank')
+    : null
+
+  if (previewable && !previewWindow) {
+    throw new Error(
+      'O navegador bloqueou a nova aba. Permita pop-ups para abrir este material.',
+    )
+  }
+
+  try {
+    const signedUrl = await createTrainingAssetSignedUrl(asset, {
+      download: !previewable,
+    })
+
+    if (previewable) {
+      previewWindow!.opener = null
+      previewWindow!.location.href = signedUrl
+      return
+    }
+
+    const link = document.createElement('a')
+    link.href = signedUrl
+    link.rel = 'noopener noreferrer'
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  } catch (error) {
+    previewWindow?.close()
+    throw error
+  }
+}
+
 export async function getTrainingLearningExperience(
   organizationId: string,
   trainingId: string,
