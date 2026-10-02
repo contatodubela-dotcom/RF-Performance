@@ -47,12 +47,42 @@ export async function getTrainingLibrary(
   }))
 }
 
+export function canPreviewTrainingAssetInBrowser(
+  asset: TrainingLibraryAsset,
+): boolean {
+  return (
+    asset.mime_type === 'application/pdf' ||
+    asset.mime_type.startsWith('image/')
+  )
+}
+
+function trainingAssetDownloadName(asset: TrainingLibraryAsset): string {
+  const storageFileName = asset.storage_path.split('/').pop() ?? 'material'
+  return storageFileName.replace(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}_/i,
+    '',
+  )
+}
+
 export async function createTrainingAssetSignedUrl(
   asset: TrainingLibraryAsset,
+  options?: { download?: boolean },
 ): Promise<string> {
+  const download = options?.download ?? false
+
+  if (download && !asset.is_downloadable) {
+    throw new Error('O download deste material não está permitido.')
+  }
+
   const { data, error } = await supabase.storage
     .from(asset.storage_bucket)
-    .createSignedUrl(asset.storage_path, TRAINING_SIGNED_URL_TTL_SECONDS)
+    .createSignedUrl(
+      asset.storage_path,
+      TRAINING_SIGNED_URL_TTL_SECONDS,
+      download
+        ? { download: trainingAssetDownloadName(asset) }
+        : undefined,
+    )
 
   if (error) throw error
 
@@ -61,6 +91,52 @@ export async function createTrainingAssetSignedUrl(
   }
 
   return data.signedUrl
+}
+
+export async function openTrainingAsset(
+  asset: TrainingLibraryAsset,
+): Promise<void> {
+  const previewable = canPreviewTrainingAssetInBrowser(asset)
+
+  if (!previewable && !asset.is_downloadable) {
+    throw new Error('O download deste material não está permitido.')
+  }
+
+  // Para pré-visualização, a aba precisa ser aberta durante o clique do usuário.
+  // Abrir somente depois de aguardar a URL assinada faz Chrome/Edge tratarem
+  // a ação como popup assíncrono e bloquearem a nova aba.
+  const previewWindow = previewable
+    ? window.open('', '_blank')
+    : null
+
+  if (previewable && !previewWindow) {
+    throw new Error(
+      'O navegador bloqueou a nova aba. Permita pop-ups para abrir este material.',
+    )
+  }
+
+  try {
+    const signedUrl = await createTrainingAssetSignedUrl(asset, {
+      download: !previewable,
+    })
+
+    if (previewable) {
+      previewWindow!.opener = null
+      previewWindow!.location.href = signedUrl
+      return
+    }
+
+    const link = document.createElement('a')
+    link.href = signedUrl
+    link.rel = 'noopener noreferrer'
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  } catch (error) {
+    previewWindow?.close()
+    throw error
+  }
 }
 
 export async function getTrainingLearningExperience(

@@ -8,6 +8,7 @@ import {
   Pencil,
   ShieldAlert,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCommercialPlanReference } from '@/hooks/useCommercialPlan'
 import { TRAINING_STATUS_LABELS } from '@/lib/commercialPlan'
@@ -159,6 +161,7 @@ function TrainingEditor({
 
 export default function TrainingPage() {
   const { activeOrganization, user, isAdmin, isDirector } = useAuth()
+  const navigate = useNavigate()
   const orgId = activeOrganization?.id
   const canManage = isAdmin || isDirector
   const [editing, setEditing] = useState<TrainingModule | null>(null)
@@ -190,6 +193,9 @@ export default function TrainingPage() {
     queryKey: ['training-library', orgId, user?.id],
     enabled: !!orgId && !!user?.id,
     queryFn: () => getTrainingLibrary(orgId!),
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 
   const completed = modules.filter(
@@ -201,6 +207,18 @@ export default function TrainingPage() {
       <PageHeader
         title="Treinamentos"
         description="Acesse materiais de desenvolvimento e acompanhe a trilha prática do programa comercial."
+        action={
+          isAdmin ? (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => navigate(ROUTES.TRAINING_ADMIN)}
+            >
+              <BookOpen className="mr-2 h-4 w-4" />
+              Gerenciar treinamentos
+            </button>
+          ) : undefined
+        }
       />
 
       <section className="mb-8">

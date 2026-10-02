@@ -11,6 +11,8 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  Maximize2,
+  Minimize2,
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react'
@@ -23,8 +25,9 @@ import { Progress } from '@/components/ui/progress'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  createTrainingAssetSignedUrl,
+  canPreviewTrainingAssetInBrowser,
   getTrainingLearningExperience,
+  openTrainingAsset,
   saveTrainingLessonProgress,
 } from '@/services/trainingLibraryService'
 import type {
@@ -407,13 +410,6 @@ function lessonStatusLabel(lesson: TrainingLibraryLessonWithProgress) {
   return 'Não iniciada'
 }
 
-function canPreviewAssetInBrowser(asset: TrainingLibraryAsset) {
-  return (
-    asset.mime_type === 'application/pdf' ||
-    asset.mime_type.startsWith('image/')
-  )
-}
-
 export default function TrainingCoursePage() {
   const { trainingId } = useParams<{ trainingId: string }>()
   const navigate = useNavigate()
@@ -422,6 +418,8 @@ export default function TrainingCoursePage() {
   const orgId = activeOrganization?.id
   const [currentIndex, setCurrentIndex] = useState(0)
   const [openingAssetId, setOpeningAssetId] = useState<string | null>(null)
+  const [isPageExpanded, setIsPageExpanded] = useState(false)
+  const pageRef = useRef<HTMLDivElement | null>(null)
   const initializedTrainingId = useRef<string | null>(null)
   const startedLessonIds = useRef<Set<string>>(new Set())
 
@@ -437,7 +435,9 @@ export default function TrainingCoursePage() {
     queryKey,
     enabled: !!orgId && !!trainingId && !!user?.id,
     queryFn: () => getTrainingLearningExperience(orgId!, trainingId!),
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 
   const visibleModules = useMemo<TrainingLibraryModuleWithLessons[]>(() => {
@@ -469,6 +469,37 @@ export default function TrainingCoursePage() {
     setCurrentIndex(firstIncomplete >= 0 ? firstIncomplete : Math.max(lessons.length - 1, 0))
     initializedTrainingId.current = trainingId
   }, [experience, lessons, trainingId])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsPageExpanded(document.fullscreenElement === pageRef.current)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () =>
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  async function handleTogglePageExpansion() {
+    try {
+      if (document.fullscreenElement === pageRef.current) {
+        await document.exitFullscreen()
+        return
+      }
+
+      if (!pageRef.current?.requestFullscreen) {
+        throw new Error('Seu navegador não oferece suporte ao modo de tela cheia.')
+      }
+
+      await pageRef.current.requestFullscreen()
+    } catch (fullscreenError) {
+      toast.error(
+        fullscreenError instanceof Error
+          ? fullscreenError.message
+          : 'Não foi possível expandir a página.',
+      )
+    }
+  }
 
   const currentLesson = lessons[currentIndex] ?? null
   const requiredLessons = lessons.filter((lesson) => lesson.is_required)
@@ -542,8 +573,7 @@ export default function TrainingCoursePage() {
     setOpeningAssetId(asset.id)
 
     try {
-      const signedUrl = await createTrainingAssetSignedUrl(asset)
-      window.open(signedUrl, '_blank', 'noopener,noreferrer')
+      await openTrainingAsset(asset)
     } catch (openError) {
       toast.error(
         openError instanceof Error
@@ -619,19 +649,105 @@ export default function TrainingCoursePage() {
     )
   }
 
+  const assets = experience.training.assets.filter(
+    (asset) => asset.asset_type !== 'cover',
+  )
+
   if (!currentLesson) {
     return (
-      <div className="page-container">
+      <div
+        ref={pageRef}
+        className="page-container overflow-y-auto bg-gray-50"
+      >
+        <div className="mx-auto w-full max-w-[1440px]">
         <PageHeader
           title={experience.training.title}
           description={experience.training.description}
+          action={(
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleTogglePageExpansion}
+              >
+                {isPageExpanded ? (
+                  <Minimize2 className="mr-2 h-4 w-4" />
+                ) : (
+                  <Maximize2 className="mr-2 h-4 w-4" />
+                )}
+                {isPageExpanded ? 'Sair da expansão' : 'Expandir página'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => navigate(ROUTES.TRAINING)}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Biblioteca
+              </button>
+            </div>
+          )}
         />
-        <div className="card">
-          <EmptyState
-            icon={BookOpen}
-            title="Aulas ainda não disponíveis"
-            description="Este treinamento ainda não possui aulas publicadas."
-          />
+
+        <div className="space-y-5">
+          <div className="card">
+            <EmptyState
+              icon={BookOpen}
+              title="Aulas ainda não disponíveis"
+              description="Este treinamento ainda não possui aulas publicadas."
+            />
+          </div>
+
+          {!!assets.length && (
+            <section className="card p-5">
+              <h2 className="font-semibold text-gray-900">Materiais de apoio</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Os materiais já podem ser consultados mesmo antes da publicação das aulas.
+              </p>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {assets.map((asset) => {
+                  const opening = openingAssetId === asset.id
+                  const previewable = canPreviewTrainingAssetInBrowser(asset)
+
+                  return (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-3 text-left transition hover:border-brand-200 hover:bg-brand-50"
+                      onClick={() => handleOpenAsset(asset)}
+                      disabled={opening || (!previewable && !asset.is_downloadable)}
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <FileText className="h-4 w-4 shrink-0 text-gray-500" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-gray-800">
+                            {asset.display_name}
+                          </span>
+                          <span className="block text-xs text-gray-500">
+                            {previewable
+                              ? 'Abrir material'
+                              : asset.is_downloadable
+                                ? 'Baixar material'
+                                : 'Download indisponível'}
+                          </span>
+                        </span>
+                      </span>
+
+                      {opening ? (
+                        <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-brand-700" />
+                      ) : previewable ? (
+                        <ExternalLink className="h-4 w-4 shrink-0 text-gray-400" />
+                      ) : (
+                        <Download className="h-4 w-4 shrink-0 text-gray-400" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+        </div>
         </div>
       </div>
     )
@@ -641,24 +757,38 @@ export default function TrainingCoursePage() {
     (module) => module.id === currentLesson.module_id,
   )
   const currentCompleted = currentLesson.progress?.status === 'completed'
-  const assets = experience.training.assets.filter(
-    (asset) => asset.asset_type !== 'cover',
-  )
-
   return (
-    <div className="page-container">
+    <div
+      ref={pageRef}
+      className="page-container overflow-y-auto bg-gray-50"
+    >
+      <div className="mx-auto w-full max-w-[1440px]">
       <PageHeader
         title={experience.training.title}
         description={experience.training.description}
         action={(
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => navigate(ROUTES.TRAINING)}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Biblioteca
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleTogglePageExpansion}
+            >
+              {isPageExpanded ? (
+                <Minimize2 className="mr-2 h-4 w-4" />
+              ) : (
+                <Maximize2 className="mr-2 h-4 w-4" />
+              )}
+              {isPageExpanded ? 'Sair da expansão' : 'Expandir página'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => navigate(ROUTES.TRAINING)}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Biblioteca
+            </button>
+          </div>
         )}
       />
 
@@ -776,7 +906,7 @@ export default function TrainingCoursePage() {
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {assets.map((asset) => {
                   const opening = openingAssetId === asset.id
-                  const previewable = canPreviewAssetInBrowser(asset)
+                  const previewable = canPreviewTrainingAssetInBrowser(asset)
 
                   return (
                     <button
@@ -784,7 +914,7 @@ export default function TrainingCoursePage() {
                       type="button"
                       className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-3 text-left transition hover:border-brand-200 hover:bg-brand-50"
                       onClick={() => handleOpenAsset(asset)}
-                      disabled={opening}
+                      disabled={opening || (!previewable && !asset.is_downloadable)}
                     >
                       <span className="flex min-w-0 items-center gap-3">
                         <FileText className="h-4 w-4 shrink-0 text-gray-500" />
@@ -793,7 +923,11 @@ export default function TrainingCoursePage() {
                             {asset.display_name}
                           </span>
                           <span className="block text-xs text-gray-500">
-                            {previewable ? 'Abrir material' : 'Baixar material'}
+                            {previewable
+                              ? 'Abrir material'
+                              : asset.is_downloadable
+                                ? 'Baixar material'
+                                : 'Download indisponível'}
                           </span>
                         </span>
                       </span>
@@ -881,6 +1015,7 @@ export default function TrainingCoursePage() {
             ))}
           </div>
         </aside>
+      </div>
       </div>
     </div>
   )
