@@ -15,6 +15,7 @@ export const ROUTES = {
   TEAMS: '/app/equipes',
   USERS: '/app/usuarios',
   SETTINGS: '/app/configuracoes',
+  TRAINING_ADMIN: '/app/administracao/treinamentos',
 
   // Gestão (future)
   PLAN_90_DAYS: '/app/plano-90-dias',
