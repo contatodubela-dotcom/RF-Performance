@@ -193,6 +193,9 @@ export default function TrainingPage() {
     queryKey: ['training-library', orgId, user?.id],
     enabled: !!orgId && !!user?.id,
     queryFn: () => getTrainingLibrary(orgId!),
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 
   const completed = modules.filter(
