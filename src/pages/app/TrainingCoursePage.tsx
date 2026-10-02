@@ -11,6 +11,8 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  Maximize2,
+  Minimize2,
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react'
@@ -416,6 +418,8 @@ export default function TrainingCoursePage() {
   const orgId = activeOrganization?.id
   const [currentIndex, setCurrentIndex] = useState(0)
   const [openingAssetId, setOpeningAssetId] = useState<string | null>(null)
+  const [isPageExpanded, setIsPageExpanded] = useState(false)
+  const pageRef = useRef<HTMLDivElement | null>(null)
   const initializedTrainingId = useRef<string | null>(null)
   const startedLessonIds = useRef<Set<string>>(new Set())
 
@@ -465,6 +469,37 @@ export default function TrainingCoursePage() {
     setCurrentIndex(firstIncomplete >= 0 ? firstIncomplete : Math.max(lessons.length - 1, 0))
     initializedTrainingId.current = trainingId
   }, [experience, lessons, trainingId])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsPageExpanded(document.fullscreenElement === pageRef.current)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () =>
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  async function handleTogglePageExpansion() {
+    try {
+      if (document.fullscreenElement === pageRef.current) {
+        await document.exitFullscreen()
+        return
+      }
+
+      if (!pageRef.current?.requestFullscreen) {
+        throw new Error('Seu navegador não oferece suporte ao modo de tela cheia.')
+      }
+
+      await pageRef.current.requestFullscreen()
+    } catch (fullscreenError) {
+      toast.error(
+        fullscreenError instanceof Error
+          ? fullscreenError.message
+          : 'Não foi possível expandir a página.',
+      )
+    }
+  }
 
   const currentLesson = lessons[currentIndex] ?? null
   const requiredLessons = lessons.filter((lesson) => lesson.is_required)
@@ -620,19 +655,36 @@ export default function TrainingCoursePage() {
 
   if (!currentLesson) {
     return (
-      <div className="page-container">
+      <div
+        ref={pageRef}
+        className="page-container overflow-y-auto bg-gray-50"
+      >
         <PageHeader
           title={experience.training.title}
           description={experience.training.description}
           action={(
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => navigate(ROUTES.TRAINING)}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Biblioteca
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleTogglePageExpansion}
+              >
+                {isPageExpanded ? (
+                  <Minimize2 className="mr-2 h-4 w-4" />
+                ) : (
+                  <Maximize2 className="mr-2 h-4 w-4" />
+                )}
+                {isPageExpanded ? 'Sair da expansão' : 'Expandir página'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => navigate(ROUTES.TRAINING)}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Biblioteca
+              </button>
+            </div>
           )}
         />
 
@@ -704,19 +756,36 @@ export default function TrainingCoursePage() {
   )
   const currentCompleted = currentLesson.progress?.status === 'completed'
   return (
-    <div className="page-container">
+    <div
+      ref={pageRef}
+      className="page-container overflow-y-auto bg-gray-50"
+    >
       <PageHeader
         title={experience.training.title}
         description={experience.training.description}
         action={(
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => navigate(ROUTES.TRAINING)}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Biblioteca
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleTogglePageExpansion}
+            >
+              {isPageExpanded ? (
+                <Minimize2 className="mr-2 h-4 w-4" />
+              ) : (
+                <Maximize2 className="mr-2 h-4 w-4" />
+              )}
+              {isPageExpanded ? 'Sair da expansão' : 'Expandir página'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => navigate(ROUTES.TRAINING)}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Biblioteca
+            </button>
+          </div>
         )}
       />
 
