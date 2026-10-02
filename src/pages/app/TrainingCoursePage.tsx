@@ -659,6 +659,7 @@ export default function TrainingCoursePage() {
         ref={pageRef}
         className="page-container overflow-y-auto bg-gray-50"
       >
+        <div className="mx-auto w-full max-w-[1440px]">
         <PageHeader
           title={experience.training.title}
           description={experience.training.description}
@@ -747,6 +748,7 @@ export default function TrainingCoursePage() {
             </section>
           )}
         </div>
+        </div>
       </div>
     )
   }
@@ -760,6 +762,7 @@ export default function TrainingCoursePage() {
       ref={pageRef}
       className="page-container overflow-y-auto bg-gray-50"
     >
+      <div className="mx-auto w-full max-w-[1440px]">
       <PageHeader
         title={experience.training.title}
         description={experience.training.description}
@@ -1012,6 +1015,7 @@ export default function TrainingCoursePage() {
             ))}
           </div>
         </aside>
+      </div>
       </div>
     </div>
   )
