@@ -29,7 +29,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import {
   canPreviewTrainingAssetInBrowser,
-  createTrainingAssetSignedUrl,
+  openTrainingAsset,
 } from '@/services/trainingLibraryService'
 import {
   archiveTrainingLibraryAsset,
@@ -792,16 +792,7 @@ export default function TrainingLibraryAdminPage() {
   async function handleOpenAsset(asset: TrainingLibraryAsset) {
     setOpeningAssetId(asset.id)
     try {
-      const previewable = canPreviewTrainingAssetInBrowser(asset)
-
-      if (!previewable && !asset.is_downloadable) {
-        throw new Error('O download deste material não está permitido.')
-      }
-
-      const url = await createTrainingAssetSignedUrl(asset, {
-        download: !previewable,
-      })
-      window.open(url, '_blank', 'noopener,noreferrer')
+      await openTrainingAsset(asset)
     } catch (error) {
       toast.error(errorMessage(error))
     } finally {
