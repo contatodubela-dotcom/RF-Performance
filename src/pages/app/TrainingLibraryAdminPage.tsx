@@ -4,6 +4,7 @@ import {
   Archive,
   BookOpen,
   Copy,
+  Download,
   ExternalLink,
   FilePlus2,
   FileText,
@@ -26,7 +27,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
-import { createTrainingAssetSignedUrl } from '@/services/trainingLibraryService'
+import {
+  canPreviewTrainingAssetInBrowser,
+  createTrainingAssetSignedUrl,
+} from '@/services/trainingLibraryService'
 import {
   archiveTrainingLibraryAsset,
   archiveTrainingLibraryItem,
@@ -788,7 +792,15 @@ export default function TrainingLibraryAdminPage() {
   async function handleOpenAsset(asset: TrainingLibraryAsset) {
     setOpeningAssetId(asset.id)
     try {
-      const url = await createTrainingAssetSignedUrl(asset)
+      const previewable = canPreviewTrainingAssetInBrowser(asset)
+
+      if (!previewable && !asset.is_downloadable) {
+        throw new Error('O download deste material não está permitido.')
+      }
+
+      const url = await createTrainingAssetSignedUrl(asset, {
+        download: !previewable,
+      })
       window.open(url, '_blank', 'noopener,noreferrer')
     } catch (error) {
       toast.error(errorMessage(error))
@@ -1201,7 +1213,11 @@ export default function TrainingLibraryAdminPage() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {assets.map((asset) => (
+                    {assets.map((asset) => {
+                      const previewable = canPreviewTrainingAssetInBrowser(asset)
+                      const unavailable = !previewable && !asset.is_downloadable
+
+                      return (
                       <div
                         key={asset.id}
                         className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-3"
@@ -1213,7 +1229,12 @@ export default function TrainingLibraryAdminPage() {
                               {asset.display_name}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {ASSET_LABELS[asset.asset_type]}
+                              {ASSET_LABELS[asset.asset_type]} •{' '}
+                              {unavailable
+                                ? 'download indisponível'
+                                : previewable
+                                  ? 'abrir no navegador'
+                                  : 'baixar arquivo'}
                             </p>
                           </div>
                         </div>
@@ -1223,13 +1244,15 @@ export default function TrainingLibraryAdminPage() {
                             type="button"
                             className="rounded p-2 text-gray-500 hover:bg-gray-50"
                             onClick={() => handleOpenAsset(asset)}
-                            disabled={openingAssetId === asset.id}
+                            disabled={openingAssetId === asset.id || unavailable}
                             aria-label={`Abrir ${asset.display_name}`}
                           >
                             {openingAssetId === asset.id ? (
                               <RefreshCw className="h-4 w-4 animate-spin" />
-                            ) : (
+                            ) : previewable ? (
                               <ExternalLink className="h-4 w-4" />
+                            ) : (
+                              <Download className="h-4 w-4" />
                             )}
                           </button>
                           <button
@@ -1247,7 +1270,8 @@ export default function TrainingLibraryAdminPage() {
                           </button>
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </section>
