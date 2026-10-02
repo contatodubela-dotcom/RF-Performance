@@ -47,12 +47,42 @@ export async function getTrainingLibrary(
   }))
 }
 
+export function canPreviewTrainingAssetInBrowser(
+  asset: TrainingLibraryAsset,
+): boolean {
+  return (
+    asset.mime_type === 'application/pdf' ||
+    asset.mime_type.startsWith('image/')
+  )
+}
+
+function trainingAssetDownloadName(asset: TrainingLibraryAsset): string {
+  const storageFileName = asset.storage_path.split('/').pop() ?? 'material'
+  return storageFileName.replace(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}_/i,
+    '',
+  )
+}
+
 export async function createTrainingAssetSignedUrl(
   asset: TrainingLibraryAsset,
+  options?: { download?: boolean },
 ): Promise<string> {
+  const download = options?.download ?? false
+
+  if (download && !asset.is_downloadable) {
+    throw new Error('O download deste material não está permitido.')
+  }
+
   const { data, error } = await supabase.storage
     .from(asset.storage_bucket)
-    .createSignedUrl(asset.storage_path, TRAINING_SIGNED_URL_TTL_SECONDS)
+    .createSignedUrl(
+      asset.storage_path,
+      TRAINING_SIGNED_URL_TTL_SECONDS,
+      download
+        ? { download: trainingAssetDownloadName(asset) }
+        : undefined,
+    )
 
   if (error) throw error
 
