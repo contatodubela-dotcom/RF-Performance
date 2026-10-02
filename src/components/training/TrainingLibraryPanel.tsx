@@ -13,7 +13,10 @@ import { toast } from 'sonner'
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import { ROUTES } from '@/constants/routes'
-import { createTrainingAssetSignedUrl } from '@/services/trainingLibraryService'
+import {
+  canPreviewTrainingAssetInBrowser,
+  createTrainingAssetSignedUrl,
+} from '@/services/trainingLibraryService'
 import type {
   TrainingLibraryAsset,
   TrainingLibraryCategory,
@@ -64,7 +67,15 @@ export default function TrainingLibraryPanel({
     setOpeningAssetId(asset.id)
 
     try {
-      const signedUrl = await createTrainingAssetSignedUrl(asset)
+      const previewable = canPreviewTrainingAssetInBrowser(asset)
+
+      if (!previewable && !asset.is_downloadable) {
+        throw new Error('O download deste material não está permitido.')
+      }
+
+      const signedUrl = await createTrainingAssetSignedUrl(asset, {
+        download: !previewable,
+      })
 
       window.open(
         signedUrl,
@@ -233,6 +244,8 @@ export default function TrainingLibraryPanel({
                 <div className="space-y-2">
                   {availableAssets.map((asset) => {
                     const isOpening = openingAssetId === asset.id
+                    const previewable = canPreviewTrainingAssetInBrowser(asset)
+                    const unavailable = !previewable && !asset.is_downloadable
 
                     return (
                       <button
@@ -240,7 +253,7 @@ export default function TrainingLibraryPanel({
                         type="button"
                         className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2.5 text-left transition hover:border-brand-200 hover:bg-brand-50"
                         onClick={() => handleOpenAsset(asset)}
-                        disabled={isOpening}
+                        disabled={isOpening || unavailable}
                       >
                         <span className="flex min-w-0 items-center gap-3">
                           <FileText className="h-4 w-4 shrink-0 text-gray-500" />
@@ -251,7 +264,11 @@ export default function TrainingLibraryPanel({
                             </span>
 
                             <span className="block text-xs text-gray-500">
-                              {ASSET_TYPE_LABELS[asset.asset_type]}
+                              {unavailable
+                                ? 'Download indisponível'
+                                : previewable
+                                  ? 'Abrir material'
+                                  : 'Baixar material'}
                             </span>
                           </span>
                         </span>
