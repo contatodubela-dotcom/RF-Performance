@@ -203,6 +203,40 @@ export async function upsertTrainingLibraryLesson({
   if (error) throw error
 }
 
+export async function archiveTrainingLibraryModule(
+  organizationId: string,
+  trainingId: string,
+  moduleId: string,
+): Promise<void> {
+  const { error } = await supabase.rpc(
+    'archive_training_library_module_admin',
+    {
+      p_organization_id: organizationId,
+      p_training_id: trainingId,
+      p_module_id: moduleId,
+    },
+  )
+
+  if (error) throw error
+}
+
+export async function archiveTrainingLibraryLesson(
+  organizationId: string,
+  trainingId: string,
+  lessonId: string,
+): Promise<void> {
+  const { error } = await supabase.rpc(
+    'archive_training_library_lesson_admin',
+    {
+      p_organization_id: organizationId,
+      p_training_id: trainingId,
+      p_lesson_id: lessonId,
+    },
+  )
+
+  if (error) throw error
+}
+
 export async function uploadTrainingLibraryAsset({
   organizationId,
   trainingId,
