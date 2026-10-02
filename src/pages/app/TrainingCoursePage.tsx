@@ -23,6 +23,7 @@ import { Progress } from '@/components/ui/progress'
 import { ROUTES } from '@/constants/routes'
 import { useAuth } from '@/contexts/AuthContext'
 import {
+  canPreviewTrainingAssetInBrowser,
   createTrainingAssetSignedUrl,
   getTrainingLearningExperience,
   saveTrainingLessonProgress,
@@ -407,13 +408,6 @@ function lessonStatusLabel(lesson: TrainingLibraryLessonWithProgress) {
   return 'Não iniciada'
 }
 
-function canPreviewAssetInBrowser(asset: TrainingLibraryAsset) {
-  return (
-    asset.mime_type === 'application/pdf' ||
-    asset.mime_type.startsWith('image/')
-  )
-}
-
 export default function TrainingCoursePage() {
   const { trainingId } = useParams<{ trainingId: string }>()
   const navigate = useNavigate()
@@ -542,7 +536,15 @@ export default function TrainingCoursePage() {
     setOpeningAssetId(asset.id)
 
     try {
-      const signedUrl = await createTrainingAssetSignedUrl(asset)
+      const previewable = canPreviewTrainingAssetInBrowser(asset)
+
+      if (!previewable && !asset.is_downloadable) {
+        throw new Error('O download deste material não está permitido.')
+      }
+
+      const signedUrl = await createTrainingAssetSignedUrl(asset, {
+        download: !previewable,
+      })
       window.open(signedUrl, '_blank', 'noopener,noreferrer')
     } catch (openError) {
       toast.error(
@@ -776,7 +778,7 @@ export default function TrainingCoursePage() {
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {assets.map((asset) => {
                   const opening = openingAssetId === asset.id
-                  const previewable = canPreviewAssetInBrowser(asset)
+                  const previewable = canPreviewTrainingAssetInBrowser(asset)
 
                   return (
                     <button
@@ -784,7 +786,7 @@ export default function TrainingCoursePage() {
                       type="button"
                       className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-3 text-left transition hover:border-brand-200 hover:bg-brand-50"
                       onClick={() => handleOpenAsset(asset)}
-                      disabled={opening}
+                      disabled={opening || (!previewable && !asset.is_downloadable)}
                     >
                       <span className="flex min-w-0 items-center gap-3">
                         <FileText className="h-4 w-4 shrink-0 text-gray-500" />
@@ -793,7 +795,11 @@ export default function TrainingCoursePage() {
                             {asset.display_name}
                           </span>
                           <span className="block text-xs text-gray-500">
-                            {previewable ? 'Abrir material' : 'Baixar material'}
+                            {previewable
+                              ? 'Abrir material'
+                              : asset.is_downloadable
+                                ? 'Baixar material'
+                                : 'Download indisponível'}
                           </span>
                         </span>
                       </span>
