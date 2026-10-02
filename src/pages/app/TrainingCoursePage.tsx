@@ -431,7 +431,9 @@ export default function TrainingCoursePage() {
     queryKey,
     enabled: !!orgId && !!trainingId && !!user?.id,
     queryFn: () => getTrainingLearningExperience(orgId!, trainingId!),
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 
   const visibleModules = useMemo<TrainingLibraryModuleWithLessons[]>(() => {
