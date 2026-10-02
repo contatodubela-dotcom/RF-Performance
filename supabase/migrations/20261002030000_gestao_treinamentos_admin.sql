@@ -1065,7 +1065,138 @@ on function public.archive_training_library_asset_admin(uuid, uuid)
 to authenticated;
 
 -- ============================================================================
--- 10. Storage: upload e limpeza de upload falho somente por Platform Admin
+-- 10. Arquivar módulo e aula
+-- ============================================================================
+
+create or replace function public.archive_training_library_lesson_admin(
+  p_organization_id uuid,
+  p_training_id uuid,
+  p_lesson_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private
+as $function$
+declare
+  v_user_id uuid := auth.uid();
+begin
+  if v_user_id is null then
+    raise exception 'AUTH_REQUIRED' using errcode = '42501';
+  end if;
+
+  if not private.is_platform_admin() then
+    raise exception 'TRAINING_LIBRARY_MANAGEMENT_FORBIDDEN'
+      using errcode = '42501';
+  end if;
+
+  update public.training_library_lessons
+  set
+    status = 'archived',
+    archived_at = coalesce(archived_at, now())
+  where id = p_lesson_id
+    and organization_id = p_organization_id
+    and training_id = p_training_id
+    and archived_at is null
+    and status <> 'archived';
+
+  if not found then
+    raise exception 'TRAINING_LIBRARY_LESSON_NOT_FOUND'
+      using errcode = 'P0001';
+  end if;
+
+  perform private.refresh_training_library_metadata(
+    p_organization_id,
+    p_training_id
+  );
+
+  return jsonb_build_object(
+    'lesson_id', p_lesson_id,
+    'archived', true
+  );
+end;
+$function$;
+
+revoke all
+on function public.archive_training_library_lesson_admin(uuid, uuid, uuid)
+from public, anon;
+
+grant execute
+on function public.archive_training_library_lesson_admin(uuid, uuid, uuid)
+to authenticated;
+
+create or replace function public.archive_training_library_module_admin(
+  p_organization_id uuid,
+  p_training_id uuid,
+  p_module_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private
+as $function$
+declare
+  v_user_id uuid := auth.uid();
+  v_lessons integer := 0;
+begin
+  if v_user_id is null then
+    raise exception 'AUTH_REQUIRED' using errcode = '42501';
+  end if;
+
+  if not private.is_platform_admin() then
+    raise exception 'TRAINING_LIBRARY_MANAGEMENT_FORBIDDEN'
+      using errcode = '42501';
+  end if;
+
+  update public.training_library_lessons
+  set
+    status = 'archived',
+    archived_at = coalesce(archived_at, now())
+  where organization_id = p_organization_id
+    and training_id = p_training_id
+    and module_id = p_module_id
+    and archived_at is null;
+
+  get diagnostics v_lessons = row_count;
+
+  update public.training_library_modules
+  set
+    status = 'archived',
+    archived_at = coalesce(archived_at, now())
+  where id = p_module_id
+    and organization_id = p_organization_id
+    and training_id = p_training_id
+    and archived_at is null
+    and status <> 'archived';
+
+  if not found then
+    raise exception 'TRAINING_LIBRARY_MODULE_NOT_FOUND'
+      using errcode = 'P0001';
+  end if;
+
+  perform private.refresh_training_library_metadata(
+    p_organization_id,
+    p_training_id
+  );
+
+  return jsonb_build_object(
+    'module_id', p_module_id,
+    'archived', true,
+    'lessons_archived', v_lessons
+  );
+end;
+$function$;
+
+revoke all
+on function public.archive_training_library_module_admin(uuid, uuid, uuid)
+from public, anon;
+
+grant execute
+on function public.archive_training_library_module_admin(uuid, uuid, uuid)
+to authenticated;
+
+-- ============================================================================
+-- 11. Storage: upload e limpeza de upload falho somente por Platform Admin
 -- ============================================================================
 
 create policy training_materials_insert_platform_admin
