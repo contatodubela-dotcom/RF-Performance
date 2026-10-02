@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, UserCog, ToggleLeft, ToggleRight, Mail } from 'lucide-react'
+import {
+  ArrowUpCircle,
+  Plus,
+  UserCog,
+  ToggleLeft,
+  ToggleRight,
+  Mail,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { supabase } from '@/lib/supabase'
@@ -12,6 +19,10 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { inviteUserSchema } from '@/lib/validations'
 import { formatRelativeDate } from '@/lib/formatters'
 import { ROLE_LABELS, ORG_ROLES } from '@/constants/roles'
+import {
+  promoteSalespersonToSupervisor,
+  SalespersonPromotionServiceError,
+} from '@/services/memberRoleService'
 import PageHeader from '@/components/shared/PageHeader'
 import StatusBadge from '@/components/shared/StatusBadge'
 import RoleBadge from '@/components/shared/RoleBadge'
@@ -93,6 +104,21 @@ type InviteTeamOption = {
     user_id: string
     profiles: ProfileRelation | ProfileRelation[] | null
   }[] | null
+}
+
+type PromotionTeamOption = {
+  id: string
+  name: string
+  supervisor_member_id: string | null
+  sales_location: { name: string } | { name: string }[] | null
+  supervisor:
+    | {
+        profiles: ProfileRelation | ProfileRelation[] | null
+      }
+    | {
+        profiles: ProfileRelation | ProfileRelation[] | null
+      }[]
+    | null
 }
 
 function firstRelation<T>(relation: T | T[] | null | undefined): T | null {
@@ -483,6 +509,216 @@ function InviteForm({
   )
 }
 
+
+function PromoteSalespersonForm({
+  orgId,
+  member,
+  onClose,
+}: {
+  orgId: string
+  member: OrganizationMemberRow
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [teamId, setTeamId] = useState('')
+
+  const {
+    data: teams = [],
+    isLoading: teamsLoading,
+    isError: teamsIsError,
+    error: teamsError,
+    refetch: refetchTeams,
+    isFetching: teamsIsFetching,
+  } = useQuery({
+    queryKey: ['promotion-teams', orgId],
+    enabled: !!orgId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('teams')
+        .select(`
+          id,
+          name,
+          supervisor_member_id,
+          sales_location:sales_locations!teams_location_org_operation_fkey(name),
+          supervisor:organization_members!teams_supervisor_org_fkey(
+            profiles!organization_members_user_id_fkey(full_name)
+          )
+        `)
+        .eq('organization_id', orgId)
+        .eq('status', 'active')
+        .is('archived_at', null)
+        .order('name')
+
+      if (error) throw error
+      return (data ?? []) as PromotionTeamOption[]
+    },
+  })
+
+  const selectedTeam = teams.find((team) => team.id === teamId) ?? null
+  const selectedLocation = firstRelation(selectedTeam?.sales_location)
+  const currentSupervisor = firstRelation(selectedTeam?.supervisor)
+  const currentSupervisorProfile = firstRelation(currentSupervisor?.profiles)
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      promoteSalespersonToSupervisor({
+        organizationId: orgId,
+        organizationMemberId: member.id,
+        teamId: teamId || null,
+      }),
+    onSuccess: (result) => {
+      toast.success(
+        result.assigned_team_id
+          ? 'Vendedor promovido a supervisor e equipe atualizada.'
+          : 'Vendedor promovido a supervisor.',
+      )
+
+      qc.invalidateQueries({ queryKey: ['org-members'] })
+      qc.invalidateQueries({ queryKey: ['teams'] })
+      qc.invalidateQueries({ queryKey: ['team-members'] })
+      qc.invalidateQueries({ queryKey: ['available-salespersons'] })
+      qc.invalidateQueries({ queryKey: ['supervisors'] })
+      qc.invalidateQueries({ queryKey: ['org-stats'] })
+      qc.invalidateQueries({ queryKey: ['setup-checklist'] })
+      onClose()
+    },
+    onError: (error: Error) => {
+      if (error instanceof SalespersonPromotionServiceError) {
+        toast.error(error.message)
+        return
+      }
+
+      toast.error(error.message || 'Não foi possível concluir a promoção.')
+    },
+  })
+
+  const displayName =
+    member.profile?.full_name ??
+    member.profile?.preferred_name ??
+    member.profile?.email ??
+    member.user_id
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-brand-200 bg-brand-50 p-4">
+        <p className="text-sm font-semibold text-brand-900">
+          Promover {displayName} para Supervisor
+        </p>
+        <p className="mt-1 text-xs leading-5 text-brand-800">
+          O mesmo usuário e o mesmo vínculo serão preservados. As vendas,
+          avaliações, treinamentos e históricos anteriores continuarão associados
+          a ele. O vínculo ativo como vendedor será encerrado.
+        </p>
+      </div>
+
+      <div>
+        <label className="form-label">Equipe a supervisionar</label>
+        <select
+          className="form-input"
+          value={teamId}
+          onChange={(event) => setTeamId(event.target.value)}
+          disabled={teamsLoading || mutation.isPending}
+        >
+          <option value="">Promover sem atribuir equipe agora</option>
+          {teams.map((team) => {
+            const location = firstRelation(team.sales_location)
+            const supervisor = firstRelation(team.supervisor)
+            const supervisorProfile = firstRelation(supervisor?.profiles)
+
+            return (
+              <option key={team.id} value={team.id}>
+                {team.name}
+                {location?.name ? ` — ${location.name}` : ''}
+                {supervisorProfile?.full_name
+                  ? ` — atual: ${supervisorProfile.full_name}`
+                  : ' — sem supervisor'}
+              </option>
+            )
+          })}
+        </select>
+
+        <p className="mt-1 text-xs text-gray-500">
+          A equipe é opcional. Você também pode promovê-lo agora e definir a
+          equipe depois em Gestão de Equipes.
+        </p>
+
+        {teamsIsError && (
+          <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            <p>
+              Não foi possível carregar as equipes: {' '}
+              {readableError(teamsError, 'erro desconhecido')}
+            </p>
+            <button
+              type="button"
+              className="mt-2 font-medium underline"
+              onClick={() => refetchTeams()}
+              disabled={teamsIsFetching}
+            >
+              {teamsIsFetching ? 'Tentando novamente...' : 'Tentar novamente'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {selectedTeam && (
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            selectedTeam.supervisor_member_id
+              ? 'border-amber-200 bg-amber-50 text-amber-900'
+              : 'border-gray-200 bg-gray-50 text-gray-700'
+          }`}
+        >
+          <p className="font-medium">
+            {selectedTeam.name}
+            {selectedLocation?.name ? ` — ${selectedLocation.name}` : ''}
+          </p>
+          {selectedTeam.supervisor_member_id ? (
+            <p className="mt-1 text-xs leading-5">
+              Esta equipe já possui o supervisor{' '}
+              <strong>
+                {currentSupervisorProfile?.full_name ?? 'atual'}
+              </strong>.
+              Ao confirmar, o vendedor promovido passará a ser o novo supervisor
+              desta equipe e o histórico da troca será preservado.
+            </p>
+          ) : (
+            <p className="mt-1 text-xs">
+              Esta equipe está sem supervisor e será atribuída ao usuário promovido.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="rounded-lg border border-gray-200 p-3 text-xs leading-5 text-gray-600">
+        <strong>O que acontecerá:</strong> o perfil passará de Vendedor para
+        Supervisor; o vínculo operacional ativo como vendedor será encerrado sem
+        apagar histórico; se uma equipe for escolhida, a supervisão será atualizada
+        na mesma operação.
+      </div>
+
+      <div className="flex justify-end gap-3 pt-2">
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={onClose}
+          disabled={mutation.isPending}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending || teamsIsError}
+        >
+          <ArrowUpCircle className="h-4 w-4" />
+          {mutation.isPending ? 'Promovendo...' : 'Promover para supervisor'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function UsersPage() {
   const {
     activeOrganization,
@@ -496,6 +732,8 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [promotionTarget, setPromotionTarget] =
+    useState<OrganizationMemberRow | null>(null)
   const [toggleConfirm, setToggleConfirm] = useState<{ id: string; name: string; status: string } | null>(null)
   const [resendConfirm, setResendConfirm] = useState<{
     id: string
@@ -799,6 +1037,22 @@ export default function UsersPage() {
                       </td>
                       <td className="table-td text-right">
                         <div className="flex justify-end gap-1">
+                          {canManageUsers &&
+                            !isSupervisor &&
+                            m.status === 'active' &&
+                            m.role === ORG_ROLES.SALESPERSON &&
+                            m.user_id !== profile?.id && (
+                            <button
+                              type="button"
+                              onClick={() => setPromotionTarget(m)}
+                              className="p-1.5 rounded text-sm text-gray-400 hover:text-brand-700 hover:bg-brand-50"
+                              title="Promover para supervisor"
+                              aria-label={`Promover ${displayName} para supervisor`}
+                            >
+                              <ArrowUpCircle className="h-5 w-5" />
+                            </button>
+                          )}
+
                           {canInviteUsers &&
                             m.status === 'active' &&
                             m.user_id !== profile?.id &&
@@ -854,6 +1108,24 @@ export default function UsersPage() {
             activeMembershipId={activeMembership?.id ?? null}
             onClose={() => setInviteOpen(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={promotionTarget !== null}
+        onOpenChange={(open) => !open && setPromotionTarget(null)}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Promover vendedor</DialogTitle>
+          </DialogHeader>
+          {promotionTarget && (
+            <PromoteSalespersonForm
+              orgId={orgId}
+              member={promotionTarget}
+              onClose={() => setPromotionTarget(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
