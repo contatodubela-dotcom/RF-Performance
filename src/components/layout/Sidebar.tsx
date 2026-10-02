@@ -144,6 +144,11 @@ const NAV: NavSection[] = [
         icon: UserCog,
       },
       {
+        label: 'Gestão de Treinamentos',
+        path: ROUTES.TRAINING_ADMIN,
+        icon: BookOpen,
+      },
+      {
         label: 'Configurações',
         path: ROUTES.SETTINGS,
         icon: Settings,
