@@ -44,8 +44,8 @@ begin
   end if;
 
   if not (
-    pg_catalog.coalesce(private.is_platform_admin(), false)
-    or pg_catalog.coalesce(
+    coalesce(private.is_platform_admin(), false)
+    or coalesce(
       private.has_org_role(
         p_organization_id,
         array['director']::text[]
@@ -94,7 +94,7 @@ begin
 
   select
     pg_catalog.count(*)::integer,
-    pg_catalog.coalesce(
+    coalesce(
       pg_catalog.jsonb_agg(
         pg_catalog.jsonb_build_object(
           'team_member_id', tm.id,
@@ -117,10 +117,10 @@ begin
 
   update public.team_members
   set status = 'inactive',
-      end_at = pg_catalog.coalesce(end_at, v_now),
+      end_at = coalesce(end_at, v_now),
       updated_at = v_now,
       updated_by = v_actor_user_id,
-      metadata = pg_catalog.coalesce(metadata, '{}'::jsonb)
+      metadata = coalesce(metadata, '{}'::jsonb)
         || pg_catalog.jsonb_build_object(
           'ended_reason', 'promoted_to_supervisor',
           'promoted_at', v_now,
@@ -136,7 +136,7 @@ begin
   set role = 'supervisor',
       updated_at = v_now,
       updated_by = v_actor_user_id,
-      metadata = pg_catalog.coalesce(metadata, '{}'::jsonb)
+      metadata = coalesce(metadata, '{}'::jsonb)
         || pg_catalog.jsonb_build_object(
           'promoted_from_role', 'salesperson',
           'promoted_to_role', 'supervisor',
